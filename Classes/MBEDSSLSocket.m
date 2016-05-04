@@ -82,6 +82,7 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	_CRL = [MBEDCRL new];
 	_clientCertificate = [MBEDX509Certificate new];
 	_PK = [MBEDPrivateKey new];
+	_peerCertificate = nil;
 
 	mbedtls_net_init(self.context);
 
@@ -137,8 +138,14 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 
 - (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port isClient:(bool)isClient
 {
-	if ((self.CA == nil) || (self.CRL == nil) || (self.PK == nil) || ((self.clientCertificate == nil) && isClient))
+
+	if (self.CA != nil && self.CRL != nil) {
+		if (self.CA->version != 0 && self.CRL->version != 0) {
+			self.certificateVerificationEnabled = true;
+		}
+	} else {
 		@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
+	}
 
 	self.context->fd = (int)_socket;
 
@@ -283,7 +290,10 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 
 - (MBEDX509Certificate *)peerCertificate
 {
-	return [[MBEDX509Certificate alloc] initWithX509Struct:[_SSL peerCertificate]];
+	if (_peerCertificate == nil) {
+		_peerCertificate = [[MBEDX509Certificate alloc] initWithX509Struct:[_SSL peerCertificate]];
+	}
+	return _peerCertificate;
 }
 
 @end

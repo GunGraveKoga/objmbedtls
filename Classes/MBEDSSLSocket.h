@@ -26,6 +26,8 @@
     OFString* _privateKeyFile;
     const char *_privateKeyPassphrase;
     bool _certificateVerificationEnabled;
+
+    MBEDX509Certificate* _peerCertificate;
 }
 
 @property (retain, readwrite)MBEDX509Certificate* CA;

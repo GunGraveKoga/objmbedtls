@@ -5,13 +5,21 @@
 #include <mbedtls/certs.h>
 
 @class OFString;
+@class OFDictionary;
+@class OFArray;
 
 @interface MBEDX509Certificate: OFObject
 {
 	mbedtls_x509_crt _certificate;
+	OFString *_issuer;
+	OFString *_subject;
+	OFString *_subjectAlternativeNames;
 }
 
 @property(assign, readonly)mbedtls_x509_crt* certificate;
+@property(copy, readonly)OFString* issuer;
+@property(copy, readonly)OFString* subject;
+@property(copy, readonly)OFString* subjectAlternativeNames;
 
 + (instancetype)certificate;
 + (instancetype)certificateWithFile:(OFString *)file;

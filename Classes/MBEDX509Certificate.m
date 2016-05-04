@@ -4,6 +4,10 @@
 
 @interface MBEDX509Certificate()
 
+@property(copy, readwrite)OFString* issuer;
+@property(copy, readwrite)OFString* subject;
+@property(copy, readwrite)OFString* subjectAlternativeNames;
+
 @end
 
 
@@ -75,8 +79,43 @@
 - (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt
 {
 	self = [self init];
+	void* pool = objc_autoreleasePoolPush();
 
 	memcpy(self.certificate, crt, sizeof(mbedtls_x509_crt));
+
+	size_t bufSize = sizeof(char) * 1024;
+	int ret = 0;
+	char* buf = (char *)__builtin_alloca(bufSize);
+	memset(buf, 0, bufSize);
+
+	ret = mbedtls_x509_dn_gets(buf, bufSize, self.certificate->issuer);
+	if (ret > 0)
+		self.issuer = [OFString stringWithUTF8String:buf length:ret];
+	else {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
+
+	memset(buf, 0, bufSize);
+
+	ret = mbedtls_x509_dn_gets(buf, bufSize, self.certificate->subject);
+	if (ret > 0)
+		self.subject = [OFString stringWithUTF8String:buf length:ret];
+	else {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
+
+	memset(buf, 0, bufSize);
+
+	if ((x509_info_subject_alt_name(&buf, &bufSize, self.certificate->subject_alt_names)) != 0) {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
+
+	self.subjectAlternativeNames = [OFString stringWithUTF8String:buf length:bufSize];
+
+	objc_autoreleasePoolPop(pool);
 
 	return self;
 }
