@@ -25,8 +25,10 @@ OF_APPLICATION_DELEGATE(Test)
 - (void)applicationDidFinishLaunching
 {
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
-	socket.certificateVerificationEnabled = false;
+	//socket.certificateVerificationEnabled = false;
 	[socket connectToHost:@"google.com" port:443];
+	OFDate* dt = [OFDate date];
+	of_log(@"%d %d", dt.hour, dt.localHour);
 	[socket writeLine:@"GET / HTTP/1.0\r\n"];
 
 	while (!socket.isAtEndOfStream) {

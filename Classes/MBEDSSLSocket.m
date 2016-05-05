@@ -138,10 +138,11 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 
 - (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port isClient:(bool)isClient
 {
-
+	bool CAChainVerification = false;
+	
 	if (self.CA != nil && self.CRL != nil) {
-		if (self.CA->version != 0 && self.CRL->version != 0) {
-			self.certificateVerificationEnabled = true;
+		if (self.CA.certificate->version != 0 && self.CRL.context->version != 0) {
+			CAChainVerification = true;
 		}
 	} else {
 		@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
@@ -169,18 +170,27 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	[_SSL handshake];
 
 	if (self.isCertificateVerificationEnabled) {
-		int res = [_SSL peerCertificateVerified];
-		if (res != 0) {
-			if (self.delegate != nil) {
-				if ([self.delegate respondsToSelector:@selector(socket:shouldAcceptCertificate:)]) {
-					if ([self.delegate socket:self shouldAcceptCertificate:nil]) {
-						return;
+		int res = 0;
+		if (CAChainVerification) {
+			res = [_SSL peerCertificateVerified];
+			if (res != 0) {
+				if (self.delegate != nil) {
+					if ([self.delegate respondsToSelector:@selector(socket:shouldAcceptCertificate:)]) {
+						if ([self.delegate socket:self shouldAcceptCertificate:nil]) {
+							return;
+						}
 					}
 				}
+			
 			}
-			[self close];
-			@throw [MBEDSSLCertificateVerificationFailedException exceptionWithCode:res certificate:[self peerCertificate]];
+		} else {
+			of_log(@"%@", self.peerCertificate);
+			return;
 		}
+
+		[self close];
+		@throw [MBEDSSLCertificateVerificationFailedException exceptionWithCode:res certificate:[self peerCertificate]];
+		
 	}
 	
 }
