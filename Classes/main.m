@@ -25,15 +25,62 @@ OF_APPLICATION_DELEGATE(Test)
 - (void)applicationDidFinishLaunching
 {
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
-	//socket.certificateVerificationEnabled = false;
-	[socket connectToHost:@"google.com" port:443];
-	OFDate* dt = [OFDate date];
-	of_log(@"%d %d", dt.hour, dt.localHour);
-	[socket writeLine:@"GET / HTTP/1.0\r\n"];
+	bool connected = true;
+	@try {
+		[socket connectToHost:@"173.194.222.139" port:443]; //exception expected
+	}@catch (id e) {
+		of_log(@"%@", e);
+		connected = false;
+	}
 
-	while (!socket.isAtEndOfStream) {
-		OFString* l = [socket readLine];
-		of_log(@"%@", l);
+	if (connected) {
+		[socket writeLine:@"GET / HTTP/1.0\r\n"];
+
+		while (!socket.isAtEndOfStream) {
+			OFString* l = [socket readLine];
+			of_log(@"%@", l);
+		}
+	}
+
+	connected = true;
+	socket.certificateVerificationEnabled = false;
+	@try {
+		[socket connectToHost:@"173.194.222.139" port:443]; //exception not expected
+	}@catch(id e) {
+		of_log(@"Not expected exception - %@", e);
+		connected = false;
+	}
+	if (connected) {
+		[socket writeLine:@"GET / HTTP/1.0\r\n"];
+
+		while (!socket.isAtEndOfStream) {
+			OFString* l = [socket readLine];
+			of_log(@"%@", l);
+		}
+
+		[socket close];
+	}
+
+
+	connected = true;
+	socket.certificateVerificationEnabled = true;
+
+	@try {
+		[socket connectToHost:@"google.com" port:443]; //exception not expected
+	}@catch(id e) {
+		of_log(@"Not expected exception - %@", e);
+		connected = false;
+	}
+	if (connected) {
+		
+		[socket writeLine:@"GET / HTTP/1.0\r\n"];
+
+		while (!socket.isAtEndOfStream) {
+			OFString* l = [socket readLine];
+			of_log(@"%@", l);
+		}
+
+		[socket close];
 	}
 }
 
