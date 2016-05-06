@@ -1,6 +1,8 @@
 #import <ObjFW/ObjFW.h>
 #import "MBEDX509Certificate.h"
 
+#include <mbedtls/oid.h>
+
 
 @interface MBEDX509Certificate()
 
@@ -13,11 +15,18 @@
 @property(copy, readwrite)OFDate* expires;
 @property(assign, readwrite)int keySize;
 @property(copy, readwrite)OFString* type;
+@property(assign, readwrite)bool isCA;
+@property(assign, readwrite)size_t maxPathLength;
+@property(copy, readwrite)OFArray* keyUsage;
+@property(copy, readwrite)OFArray* extendedKeyUsage;
+@property(copy, readwrite)OFString* serialNumber;
 
 
 - (OFDictionary *)X509_dictionaryFromX509Name:(OFString *)name;
 - (OFDictionary *)X509_dictionaryFromX509AltNames:(OFString *)names;
+- (OFArray *)X509_arrayFromX509KeyUsageString:(OFString *)string;
 - (void)X509_fillProperties;
+- (bool)X509_isAssertedDomain: (OFString*)asserted equalDomain: (OFString*)domain;
 
 @end
 
@@ -43,7 +52,7 @@ static OFString* objmbedtls_x509_info_subject_alt_name(const mbedtls_x509_sequen
 
         cur = cur->next;
     }
-
+    
     return [OFString stringWithUTF8String:(char *)[bytes items] length:([bytes count] * [bytes itemSize])];
 }
 
@@ -73,8 +82,55 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
     CERT_TYPE( MBEDTLS_X509_NS_CERT_TYPE_EMAIL_CA,           "Email CA" );
     CERT_TYPE( MBEDTLS_X509_NS_CERT_TYPE_OBJECT_SIGNING_CA,  "Object Signing CA" );
 
-#undef PRINT_ITEM
+
 #undef CERT_TYPE
+
+    return [OFString stringWithUTF8String:[bytes items] length:([bytes count] * [bytes itemSize])];
+}
+
+#define KEY_USAGE(code,name)    \
+    if( key_usage & code )      \
+        PRINT_ITEM( name );
+
+static OFString* objmbedtls_x509_info_key_usage(unsigned int key_usage )
+{
+    OFDataArray* bytes = [OFDataArray dataArrayWithItemSize:sizeof(char)];
+    const char *sep = "";
+
+    KEY_USAGE( MBEDTLS_X509_KU_DIGITAL_SIGNATURE,    "Digital Signature" );
+    KEY_USAGE( MBEDTLS_X509_KU_NON_REPUDIATION,      "Non Repudiation" );
+    KEY_USAGE( MBEDTLS_X509_KU_KEY_ENCIPHERMENT,     "Key Encipherment" );
+    KEY_USAGE( MBEDTLS_X509_KU_DATA_ENCIPHERMENT,    "Data Encipherment" );
+    KEY_USAGE( MBEDTLS_X509_KU_KEY_AGREEMENT,        "Key Agreement" );
+    KEY_USAGE( MBEDTLS_X509_KU_KEY_CERT_SIGN,        "Key Cert Sign" );
+    KEY_USAGE( MBEDTLS_X509_KU_CRL_SIGN,             "CRL Sign" );
+    KEY_USAGE( MBEDTLS_X509_KU_ENCIPHER_ONLY,        "Encipher Only" );
+    KEY_USAGE( MBEDTLS_X509_KU_DECIPHER_ONLY,        "Decipher Only" );
+
+    return [OFString stringWithUTF8String:[bytes items] length:([bytes count] * [bytes itemSize])];
+}
+
+#undef PRINT_ITEM
+#undef KEY_USAGE
+
+static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence *extended_key_usage )
+{
+    const char *desc;
+    OFDataArray* bytes = [OFDataArray dataArrayWithItemSize:sizeof(char)];
+    const mbedtls_x509_sequence *cur = extended_key_usage;
+    const char *sep = "";
+
+    while( cur != NULL )
+    {
+        if( mbedtls_oid_get_extended_key_usage( &cur->buf, &desc ) != 0 )
+            desc = "???";
+        [bytes addItems:sep count:strlen(sep)];
+        [bytes addItems:desc count:strlen(desc)];
+
+        sep = ", ";
+
+        cur = cur->next;
+    }
 
     return [OFString stringWithUTF8String:[bytes items] length:([bytes count] * [bytes itemSize])];
 }
@@ -89,6 +145,11 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 @synthesize expires = _expires;
 @synthesize keySize = _keySize;
 @synthesize type = _type;
+@synthesize isCA = _isCA;
+@synthesize maxPathLength = _maxPathLength;
+@synthesize keyUsage = _keyUsage;
+@synthesize extendedKeyUsage = _extendedKeyUsage;
+@synthesize serialNumber = _serialNumber;
 
 + (instancetype)certificate
 {
@@ -116,15 +177,27 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 
 	mbedtls_x509_crt_init(self.certificate);
 
+	_isCA = false;
+	_maxPathLength = 0;
+	_version = 0;
+
 	return self;
 }
 
 - (void)dealloc
 {
-	mbedtls_x509_crt_free(self.certificate);
 	[_issuer release];
 	[_subject release];
 	[_subjectAlternativeNames release];
+	[_signatureAlgorithm release];
+	[_issued release];
+	[_expires release];
+	[_type release];
+	[_keyUsage release];
+	[_extendedKeyUsage release];
+	[_serialNumber release];
+	mbedtls_x509_crt_free(self.certificate);
+
 	[super dealloc];
 }
 
@@ -158,7 +231,12 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 {
 	self = [self init];
 
-	memcpy(self.certificate, crt, sizeof(mbedtls_x509_crt));
+	//memcpy(self.certificate, crt, sizeof(mbedtls_x509_crt));
+
+	if ((mbedtls_x509_crt_parse_der(self.certificate, crt->raw.p, crt->raw.len)) != 0) {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
 
 	[self X509_fillProperties];
 
@@ -202,19 +280,36 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 	for (OFString* name in namesArray) {
 		
 		if ([dictionary objectForKey:dNSName] == nil) {
-			[dictionary setObject:[OFList list] forKey:dNSName];
+			[dictionary setObject:[OFMutableArray array] forKey:dNSName];
 		}
 
-		[[dictionary objectForKey:dNSName] appendObject:name];
+		[[dictionary objectForKey:dNSName] addObject:name];
 
 		[pool releaseObjects];
 	}
+	[[dictionary objectForKey:dNSName] makeImmutable];
 
 	[pool release];
 
 	[dictionary makeImmutable];
 
 	return dictionary;
+}
+
+- (OFArray *)X509_arrayFromX509KeyUsageString:(OFString *)string
+{
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	OFMutableArray* array = [OFMutableArray arrayWithArray:[string componentsSeparatedByString:[OFString stringWithUTF8String:", "]]];
+
+	[array retain];
+
+	[pool release];
+
+	[array makeImmutable];
+
+	return [array autorelease];
+
 }
 
 - (void)X509_fillProperties
@@ -224,6 +319,16 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 	size_t bufSize = sizeof(char) * 4096;
 	int ret = 0;
 	char* buf = (char *)__builtin_alloca(bufSize);
+	memset(buf, 0, bufSize);
+
+	ret = mbedtls_x509_serial_gets(buf, bufSize, &(self.certificate->serial));
+	if (ret > 0)
+		self.serialNumber = [OFString stringWithUTF8String:buf length:ret];
+	else {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
+
 	memset(buf, 0, bufSize);
 
 	ret = mbedtls_x509_dn_gets(buf, bufSize, &(self.certificate->issuer));
@@ -280,10 +385,18 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 		self.type = objmbedtls_x509_info_cert_type(self.certificate->ns_cert_type);
 
 	if( self.certificate->ext_types & MBEDTLS_X509_EXT_KEY_USAGE )
-		;
+		self.keyUsage = [self X509_arrayFromX509KeyUsageString:objmbedtls_x509_info_key_usage(self.certificate->key_usage)];
 
 	if( self.certificate->ext_types & MBEDTLS_X509_EXT_EXTENDED_KEY_USAGE )
-		;
+		self.extendedKeyUsage = [self X509_arrayFromX509KeyUsageString:objmbedtls_x509_info_ext_key_usage(&(self.certificate->ext_key_usage))];
+
+	if( self.certificate->ext_types & MBEDTLS_X509_EXT_BASIC_CONSTRAINTS ) {
+		self.isCA = self.certificate->ca_istrue ? true : false;
+
+		if (self.certificate->max_pathlen > 0)
+			self.maxPathLength = (size_t)(self.certificate->max_pathlen - 1);
+	}
+
 
 	objc_autoreleasePoolPop(pool);
 }
@@ -305,6 +418,107 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 	[self X509_fillProperties];
 }
 
+- (bool)hasCommonNameMatchingDomain: (OFString*)domain
+{
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	OFList* CNs = [self.subject objectForKey:[OFString stringWithUTF8String:"CN"]];
+
+	for (OFString* name in CNs) {
+		if ([self X509_isAssertedDomain:name equalDomain:domain]) {
+			[pool release];
+			return true;
+		}
+	}
+
+	[pool release];
+	return false;
+}
+
+- (bool)hasDNSNameMatchingDomain: (OFString*)domain
+{
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	OFList* assertedNames = [self.subjectAlternativeNames objectForKey:[OFString stringWithUTF8String:"dNSName"]];
+
+	for (OFString* name in assertedNames) {
+		if ([self X509_isAssertedDomain:name equalDomain:domain]) {
+			[pool release];
+			return true;
+		}
+	}
+
+	[pool release];
+	return false;
+}
+
+- (bool)X509_isAssertedDomain: (OFString*)asserted equalDomain: (OFString*)domain
+{
+	/*
+	 * In accordance with RFC 6125 this only allows a wildcard as the
+	 * left-most label and matches only the left-most label with it.
+	 * E.g. *.example.com matches foo.example.com,
+	 * but not foo.bar.example.com
+	 */
+
+	size_t firstValueDot;
+
+	if ([asserted caseInsensitiveCompare: domain] == OF_ORDERED_SAME)
+		return true;
+
+	if (![asserted hasPrefix: @"*."])
+		return false;
+
+	asserted = [asserted substringWithRange:of_range(2, [asserted length] - 2)];
+
+	firstValueDot = [domain rangeOfString: @"."].location;
+	if (firstValueDot == OF_NOT_FOUND)
+		return false;
+
+	domain = [domain substringWithRange:of_range(firstValueDot + 1, [domain length] - firstValueDot - 1)];
+
+	if (![asserted caseInsensitiveCompare: domain])
+		return true;
+
+	return false;
+}
+
+- (bool)hasSRVNameMatchingDomain: (OFString*)domain service: (OFString*)service
+{
+	@throw [OFNotImplementedException exceptionWithSelector:@selector(hasSRVNameMatchingDomain:service:) object:self];
+	/*
+	size_t serviceLength;
+	OFString *name;
+	OFAutoreleasePool *pool = [[OFAutoreleasePool alloc] init];
+	OFDictionary *SANs = [self subjectAlternativeName];
+	OFList *assertedNames = [[SANs objectForKey: @"otherName"]
+				     objectForKey: OID_SRVName];
+	OFEnumerator *enumerator = [assertedNames objectEnumerator];
+
+	if (![service hasPrefix: @"_"])
+		service = [service stringByPrependingString: @"_"];
+
+	service = [service stringByAppendingString: @"."];
+	serviceLength = [service length];
+
+	while ((name = [enumerator nextObject]) != nil) {
+		if ([name hasPrefix: service]) {
+			OFString *asserted;
+			asserted = [name substringWithRange: of_range(
+			    serviceLength, [name length] - serviceLength)];
+			if ([self X509_isAssertedDomain: asserted
+					    equalDomain: domain]) {
+				[pool release];
+				return true;
+			}
+		}
+	}
+
+	[pool release];
+	return false;
+	*/
+}
+
 - (mbedtls_x509_crt *)certificate
 {
 	return &_certificate;
@@ -317,13 +531,78 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 	[ret appendFormat: @"Version: v%d\n\n", self.version];
 	if (self.type != nil)
 		[ret appendFormat: @"Type: %@\n\n", self.type];
-	[ret appendFormat: @"Issuer: %@\n\n", self.issuer];
-	[ret appendFormat: @"Subject: %@\n\n", self.subject];
-	[ret appendFormat: @"SANs: %@\n\n", self.subjectAlternativeNames];
+
+	[ret appendFormat: @"Serial Number: %@\n\n", self.serialNumber];
+	bool firstValue = true;
+	bool firstKey = true;
+	[ret appendString:[OFString stringWithUTF8String:"Issuer: "]];
+
+	for (OFString* key in [self.issuer allKeys]) {
+		firstValue = true;
+
+		if (!firstKey)
+			[ret appendString:[OFString stringWithUTF8String:", "]];
+
+		@autoreleasepool {
+			for (OFString* value in [self.issuer objectForKey:key]) {
+				if (!firstValue)
+					[ret appendString:[OFString stringWithUTF8String:", "]];
+
+				[ret appendFormat:@"%@=%@", key, value];
+
+				if (firstValue)
+					firstValue = false;
+			}
+		}
+
+		if (firstKey)
+			firstKey = false;
+	}
+	[ret appendString:[OFString stringWithUTF8String:"\n\n"]];
+	[ret appendString:[OFString stringWithUTF8String:"Subject: "]];
+	firstKey = true;
+	for (OFString* key in [self.subject allKeys]) {
+		firstValue = true;
+
+		if (!firstKey)
+			[ret appendString:[OFString stringWithUTF8String:", "]];
+
+		@autoreleasepool {
+			for (OFString* value in [self.subject objectForKey:key]) {
+				if (!firstValue)
+					[ret appendString:[OFString stringWithUTF8String:", "]];
+
+				[ret appendFormat:@"%@=%@", key, value];
+
+				if (firstValue)
+					firstValue = false;
+			}
+		}
+
+		if (firstKey)
+			firstKey = false;
+	}
+	[ret appendString:[OFString stringWithUTF8String:"\n\n"]];
+	[ret appendString:[OFString stringWithUTF8String:"SANs: "]];
+	for (OFString* key in [self.subjectAlternativeNames allKeys]) {
+		firstValue = true;
+		@autoreleasepool {
+			for (OFString* value in [self.subjectAlternativeNames objectForKey:key]) {
+				if (!firstValue)
+					[ret appendString:[OFString stringWithUTF8String:", "]];
+
+				[ret appendString:value];
+
+				if (firstValue)
+					firstValue = false;
+			}
+		}
+	}
+	[ret appendString:[OFString stringWithUTF8String:"\n\n"]];
 	[ret appendFormat: @"Issued on: %@\n\n", [self.issued localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]];
 	[ret appendFormat: @"Expires on: %@\n\n", [self.expires localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]];
 	[ret appendFormat: @"Signature Algorithm: %@\n\n", self.signatureAlgorithm];
-
+	
 	char key_size_str[256];
 	size_t key_size_str_len = (size_t)(sizeof(key_size_str) * sizeof(char));
 	memset(key_size_str, 0, key_size_str_len);
@@ -334,6 +613,20 @@ static OFString* objmbedtls_x509_info_cert_type(unsigned char ns_cert_type ) {
 		[ret appendFormat: @"%s: %d bits", key_size_str, self.keySize];
 	}
 
+	[ret appendFormat: @"Basic constraints: %@", (self.isCA ? @"Yes" : @"No")];
+	if (self.maxPathLength > 0)
+		[ret appendFormat: @", max_pathlen=%zu", self.maxPathLength];
+
+	if (self.keyUsage) {
+		[ret appendString: @"\n\n"];
+		[ret appendFormat: @"Key Usage: %@", self.keyUsage];
+	}
+
+	if (self.extendedKeyUsage) {
+		[ret appendString: @"\n\n"];
+		[ret appendFormat: @"Extended Key Usage: %@", self.extendedKeyUsage];
+	}
+	
 	[ret makeImmutable];
 	return ret;
 }

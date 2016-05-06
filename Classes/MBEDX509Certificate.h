@@ -22,6 +22,11 @@
 	OFDate *_expires;
 	int _keySize;
 	OFString *_type;
+	bool _isCA;
+	size_t _maxPathLength;
+	OFArray *_keyUsage;
+	OFArray *_extendedKeyUsage;
+	OFString *_serialNumber;
 
 }
 
@@ -35,6 +40,11 @@
 @property(copy, readonly)OFDate* expires;
 @property(assign, readonly)int keySize;
 @property(copy, readonly)OFString* type;
+@property(assign, readonly)bool isCA;
+@property(assign, readonly)size_t maxPathLength;
+@property(copy, readonly)OFArray* keyUsage;
+@property(copy, readonly)OFArray* extendedKeyUsage;
+@property(copy, readonly)OFString* serialNumber;
 
 + (instancetype)certificate;
 + (instancetype)certificateWithFile:(OFString *)file;
@@ -45,5 +55,8 @@
 - (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt;
 - (void)parseFilesAtPath:(OFString *)path;
 - (void)parseFile:(OFString *)file;
+- (bool)hasCommonNameMatchingDomain: (OFString*)domain;
+- (bool)hasDNSNameMatchingDomain: (OFString*)domain;
+- (bool)hasSRVNameMatchingDomain: (OFString*)domain service: (OFString*)service;
 
 @end
