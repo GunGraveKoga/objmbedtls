@@ -72,16 +72,28 @@ OF_APPLICATION_DELEGATE(Test)
 		connected = false;
 	}
 	if (connected) {
-		
+
 		[socket writeLine:@"GET / HTTP/1.0\r\n"];
 
 		while (!socket.isAtEndOfStream) {
 			OFString* l = [socket readLine];
 			of_log(@"%@", l);
 		}
-
+		
 		[socket close];
 	}
+
+	OFTCPSocket* sk = [OFTCPSocket socket];
+
+	of_log(@"Not SSL test");
+	[sk connectToHost:@"google.com" port:443];
+	[sk writeLine:@"GET / HTTP/1.0\r\n"];
+
+		while (!sk.isAtEndOfStream) {
+			OFString* l = [sk readLine];
+			of_log(@"%@", l);
+		}
+	[sk close];
 }
 
 @end
