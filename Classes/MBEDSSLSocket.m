@@ -11,6 +11,7 @@
 @interface MBEDSSLSocket()
 
 - (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port isClient:(bool)isClient;
+- (void)reinit_SSL;
 
 @end
 
@@ -90,13 +91,25 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 
 }
 
+- (void)reinit_SSL
+{
+	[_SSL release];
+	if (_peerCertificate != nil) {
+		[_peerCertificate release];
+		_peerCertificate = nil;
+	}
+	_SSL = [MBEDSSL new];
+}
+
 - (instancetype)initWithSocket:(OFTCPSocket *)socket
 {
 	self = [self init];
 
 	@try {
-		if ((_socket = dup(socket->_socket)) <= 0)
-			@throw [OFInitializationFailedException exception];
+		if ((_socket = dup(socket->_socket)) <= 0) {
+			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
+
+		}
 	} @catch (id e) {
 		[self release];
 		@throw e;
@@ -109,6 +122,8 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 {
 	[self close];
 	_delegate = nil;
+
+	[_SSL release];
 	[_certificateFile release];
 	[_privateKeyFile release];
 	mbedtls_net_free(self.context);
@@ -116,7 +131,7 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	[_CRL release];
 	[_PK release];
 	[_clientCertificate release];
-	[_SSL release];
+	[_peerCertificate release];
 
 	[super dealloc];
 }
@@ -141,33 +156,53 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	bool CAChainVerification = false;
 	
 	if (self.CA != nil && self.CRL != nil) {
-		if (self.CA.certificate->version != 0 && self.CRL.context->version != 0) {
+		if (self.CA.version != 0 && self.CRL.context->version != 0) {
+			if (!self.CA.isCA) {
+				[super close];
+				@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
+			}
+
 			CAChainVerification = true;
 		}
+
 	} else {
+		[super close];
 		@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
 	}
 
 	self.context->fd = (int)_socket;
 
-	if (isClient)
-		[_SSL setDefaultTCPClientConfig];
-	else
-		[_SSL setDefaultTCPServerConfig];
+	@try {
+		if (isClient)
+			[_SSL setDefaultTCPClientConfig];
+		else
+			[_SSL setDefaultTCPServerConfig];
 
-	[_SSL setCertificateProfile:kDefaultProfile];
+		[_SSL setCertificateProfile:kDefaultProfile];
 
-	[_SSL setConfigSSLVersion:OBJMBED_SSLVERSION_SSLv3];
+		[_SSL setConfigSSLVersion:OBJMBED_SSLVERSION_SSLv3];
 
-	[_SSL configureSocket:self];
+		[_SSL configureSocket:self];
 
-	[_SSL configureCAChainForSocket:self];
+		[_SSL configureCAChainForSocket:self];
 
-	[_SSL configureOwnCertificateForSocket:self];
+		[_SSL configureOwnCertificateForSocket:self];
 
-	[_SSL setHostName:host];
+		[_SSL setHostName:host];
 
-	[_SSL handshake];
+	} @catch(id e) {
+		[super close];
+		[self reinit_SSL];
+		@throw [OFConnectionFailedException exceptionWithHost: host port: port socket: self];
+	}
+
+	@try {
+		[_SSL handshake];
+	}@catch(id e) {
+		[self close];
+		@throw e;
+	}
+
 
 	if (self.isCertificateVerificationEnabled) {
 		int res = 0;
@@ -184,7 +219,19 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 			
 			}
 		} else {
-			of_log(@"%@", self.peerCertificate);
+			if (![self.peerCertificate hasCommonNameMatchingDomain:host]) {
+				if (![self.peerCertificate hasDNSNameMatchingDomain:host]) {
+					if (self.delegate != nil) {
+						if ([self.delegate respondsToSelector:@selector(socket:shouldAcceptCertificate:)]) {
+							if ([self.delegate socket:self shouldAcceptCertificate:nil]) {
+								return;
+							}
+						}
+					}
+					[self close];
+					@throw [MBEDSSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_CN_MISMATCH certificate:[self peerCertificate]];
+				}
+			}
 			return;
 		}
 
@@ -199,8 +246,11 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 {
 	if (_socket != INVALID_SOCKET) {
 		[_SSL notifyPeerToClose];
+		[self reinit_SSL];
 		[super close];
+
 	}
+
 }
 
 - (void)startTLSWithExpectedHost:(nullable OFString*)host
