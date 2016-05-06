@@ -9,6 +9,7 @@
 @class OFArray;
 @class OFNumber;
 @class OFDate;
+@class OFDataArray;
 
 @interface MBEDX509Certificate: OFObject
 {
@@ -27,6 +28,8 @@
 	OFArray *_keyUsage;
 	OFArray *_extendedKeyUsage;
 	OFString *_serialNumber;
+	OFDataArray *_publicKey;
+	OFString *_publicKeyPEM;
 
 }
 
@@ -45,6 +48,8 @@
 @property(copy, readonly)OFArray* keyUsage;
 @property(copy, readonly)OFArray* extendedKeyUsage;
 @property(copy, readonly)OFString* serialNumber;
+@property(copy, readonly)OFDataArray* publicKey;
+@property(copy, readonly)OFString* publicKeyPEM;
 
 + (instancetype)certificate;
 + (instancetype)certificateWithFile:(OFString *)file;

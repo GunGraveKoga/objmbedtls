@@ -1,7 +1,9 @@
 #import <ObjFW/ObjFW.h>
 #import "MBEDX509Certificate.h"
+#import "macros.h"
 
 #include <mbedtls/oid.h>
+#include <mbedtls/pk.h>
 
 
 @interface MBEDX509Certificate()
@@ -136,6 +138,8 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 }
 
 @dynamic certificate;
+@dynamic publicKey;
+@dynamic publicKeyPEM;
 @synthesize issuer = _issuer;
 @synthesize subject = _subject;
 @synthesize subjectAlternativeNames = _subjectAlternativeNames;
@@ -522,6 +526,42 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 - (mbedtls_x509_crt *)certificate
 {
 	return &_certificate;
+}
+
+- (OFDataArray *)publicKey
+{
+	if (!_publicKey) {
+		int size = 0;
+		unsigned char buf[PUB_DER_MAX_BYTES] = {0};
+
+		size = mbedtls_pk_write_pubkey_der(&(self.certificate->pk), buf, PUB_DER_MAX_BYTES);
+
+		if (size < 0)
+			return nil;
+
+		_publicKey = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
+		[_publicKey addItems:(buf + sizeof(buf) - size) count:size];
+	}
+
+	return _publicKey;
+}
+
+- (OFString *)publicKeyPEM
+{
+	if (!_publicKeyPEM) {
+		int ret = 0;
+		size_t bufLen = mbedtls_pk_get_len(&(self.certificate->pk)) * 2;
+		unsigned char buf[bufLen];
+
+		of_log(@"PEM len is %zu", bufLen);
+
+		if ((ret = mbedtls_pk_write_pubkey_pem(&(self.certificate->pk), buf, bufLen)) != 0)
+			return nil;
+
+		_publicKeyPEM = [[OFString alloc] initWithUTF8String:(const char *)buf];
+	}
+
+	return _publicKeyPEM;
 }
 
 - (OFString*)description
