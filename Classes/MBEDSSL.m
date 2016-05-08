@@ -2,7 +2,7 @@
 #import "MBEDSSL.h"
 #import "MBEDSSLSocket.h"
 #import "MBEDX509Certificate.h"
-#import "MBEDPrivateKey.h"
+#import "MBEDPKey.h"
 #import "MBEDCRL.h"
 
 const mbedtls_x509_crt_profile kDefaultProfile = {
@@ -196,7 +196,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 #pragma clang diagnostic pop
 
-- (void)ownCertificate:(MBEDX509Certificate *)crt privateKey:(MBEDPrivateKey *)pk
+- (void)ownCertificate:(MBEDX509Certificate *)crt privateKey:(MBEDPKey *)pk
 {
 	mbedtls_ssl_conf_own_cert(self.config, crt.certificate, pk.context);
 }

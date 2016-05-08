@@ -1,5 +1,6 @@
 #import <ObjFW/ObjFW.h>
 #import "MBEDX509Certificate.h"
+#import "MBEDPKey.h"
 #import "macros.h"
 
 #include <mbedtls/oid.h>
@@ -138,8 +139,6 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 }
 
 @dynamic certificate;
-@dynamic publicKey;
-@dynamic publicKeyPEM;
 @synthesize issuer = _issuer;
 @synthesize subject = _subject;
 @synthesize subjectAlternativeNames = _subjectAlternativeNames;
@@ -154,6 +153,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 @synthesize keyUsage = _keyUsage;
 @synthesize extendedKeyUsage = _extendedKeyUsage;
 @synthesize serialNumber = _serialNumber;
+@dynamic PK;
 
 + (instancetype)certificate
 {
@@ -184,6 +184,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	_isCA = false;
 	_maxPathLength = 0;
 	_version = 0;
+	_PK = nil;
 
 	return self;
 }
@@ -200,6 +201,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	[_keyUsage release];
 	[_extendedKeyUsage release];
 	[_serialNumber release];
+	[_PK release];
 	mbedtls_x509_crt_free(self.certificate);
 
 	[super dealloc];
@@ -329,6 +331,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	if (ret > 0)
 		self.serialNumber = [OFString stringWithUTF8String:buf length:ret];
 	else {
+		objc_autoreleasePoolPop(pool);
 		[self release];
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
@@ -339,6 +342,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	if (ret > 0)
 		self.issuer = [self X509_dictionaryFromX509Name:[OFString stringWithUTF8String:buf length:ret]];
 	else {
+		objc_autoreleasePoolPop(pool);
 		[self release];
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
@@ -349,6 +353,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	if (ret > 0)
 		self.subject = [self X509_dictionaryFromX509Name:[OFString stringWithUTF8String:buf length:ret]];
 	else {
+		objc_autoreleasePoolPop(pool);
 		[self release];
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
@@ -364,6 +369,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	if (ret > 0)
 		self.signatureAlgorithm = [OFString stringWithUTF8String:buf length:ret];
 	else {
+		objc_autoreleasePoolPop(pool);
 		[self release];
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
@@ -523,45 +529,26 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	*/
 }
 
+- (MBEDX509Certificate *)next
+{
+	if (self.certificate->next != NULL)
+		return [MBEDX509Certificate certificateWithX509Struct:self.certificate->next];
+
+	return nil;
+}
+
 - (mbedtls_x509_crt *)certificate
 {
 	return &_certificate;
 }
 
-- (OFDataArray *)publicKey
+- (MBEDPKey *)PK
 {
-	if (!_publicKey) {
-		int size = 0;
-		unsigned char buf[PUB_DER_MAX_BYTES] = {0};
-
-		size = mbedtls_pk_write_pubkey_der(&(self.certificate->pk), buf, PUB_DER_MAX_BYTES);
-
-		if (size < 0)
-			return nil;
-
-		_publicKey = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
-		[_publicKey addItems:(buf + sizeof(buf) - size) count:size];
+	if (_PK == nil) {
+		_PK = [[MBEDPKey alloc] initWithStruct:&(self.certificate->pk) isPublic:true];
 	}
 
-	return _publicKey;
-}
-
-- (OFString *)publicKeyPEM
-{
-	if (!_publicKeyPEM) {
-		int ret = 0;
-		size_t bufLen = mbedtls_pk_get_len(&(self.certificate->pk)) * 2;
-		unsigned char buf[bufLen];
-
-		of_log(@"PEM len is %zu", bufLen);
-
-		if ((ret = mbedtls_pk_write_pubkey_pem(&(self.certificate->pk), buf, bufLen)) != 0)
-			return nil;
-
-		_publicKeyPEM = [[OFString alloc] initWithUTF8String:(const char *)buf];
-	}
-
-	return _publicKeyPEM;
+	return _PK;
 }
 
 - (OFString*)description

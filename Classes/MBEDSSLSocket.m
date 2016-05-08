@@ -2,8 +2,7 @@
 #import "MBEDSSLSocket.h"
 #import "MBEDX509Certificate.h"
 #import "MBEDCRL.h"
-#import "MBEDPrivateKey.h"
-#import "MBEDSSL.h"
+#import "MBEDPKey.h"
 
 #include <mbedtls/certs.h>
 #include <mbedtls/threading.h>
@@ -55,6 +54,7 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 @synthesize CRL = _CRL;
 @synthesize clientCertificate = _clientCertificate;
 @synthesize PK = _PK;
+@dynamic sslVersion;
 
 @dynamic context;
 
@@ -82,8 +82,9 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	_CA = [MBEDX509Certificate new];
 	_CRL = [MBEDCRL new];
 	_clientCertificate = [MBEDX509Certificate new];
-	_PK = [MBEDPrivateKey new];
+	_PK = [MBEDPKey new];
 	_peerCertificate = nil;
+	_sslVersion = OBJMBED_SSLVERSION_SSLv3;
 
 	mbedtls_net_init(self.context);
 
@@ -141,6 +142,32 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	return &_context;
 }
 
+- (void)setSslVersion:(objmbed_ssl_version_t)version
+{
+	if (self.sslVersion != OBJMBED_SSLVERSION_SSLv3)
+		@throw [OFException exception];
+
+	switch (version) {
+		case OBJMBED_SSLVERSION_TLSv1:
+		case OBJMBED_SSLVERSION_TLSv1_0:
+		case OBJMBED_SSLVERSION_TLSv1_1:
+		case OBJMBED_SSLVERSION_TLSv1_2:
+		case OBJMBED_SSLVERSION_SSLv3:
+			break;
+		default:
+			@throw [OFInvalidArgumentException exception];
+			break;
+	}
+
+	_sslVersion = version;
+
+}
+
+- (objmbed_ssl_version_t)sslVersion
+{
+	return _sslVersion;
+}
+
 - (bool)isCertificateVerificationEnabled
 {
 	return _certificateVerificationEnabled;
@@ -180,7 +207,7 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 
 		[_SSL setCertificateProfile:kDefaultProfile];
 
-		[_SSL setConfigSSLVersion:OBJMBED_SSLVERSION_SSLv3];
+		[_SSL setConfigSSLVersion:self.sslVersion];
 
 		[_SSL configureSocket:self];
 

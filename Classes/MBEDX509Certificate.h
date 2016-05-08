@@ -10,6 +10,7 @@
 @class OFNumber;
 @class OFDate;
 @class OFDataArray;
+@class MBEDPKey;
 
 @interface MBEDX509Certificate: OFObject
 {
@@ -28,8 +29,7 @@
 	OFArray *_keyUsage;
 	OFArray *_extendedKeyUsage;
 	OFString *_serialNumber;
-	OFDataArray *_publicKey;
-	OFString *_publicKeyPEM;
+	MBEDPKey *_PK;
 
 }
 
@@ -48,8 +48,7 @@
 @property(copy, readonly)OFArray* keyUsage;
 @property(copy, readonly)OFArray* extendedKeyUsage;
 @property(copy, readonly)OFString* serialNumber;
-@property(copy, readonly)OFDataArray* publicKey;
-@property(copy, readonly)OFString* publicKeyPEM;
+@property(copy, readonly)MBEDPKey* PK;
 
 + (instancetype)certificate;
 + (instancetype)certificateWithFile:(OFString *)file;
@@ -63,5 +62,6 @@
 - (bool)hasCommonNameMatchingDomain: (OFString*)domain;
 - (bool)hasDNSNameMatchingDomain: (OFString*)domain;
 - (bool)hasSRVNameMatchingDomain: (OFString*)domain service: (OFString*)service;
+- (MBEDX509Certificate *)next;
 
 @end

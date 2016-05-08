@@ -2,6 +2,8 @@
 #import <ObjFW/OFTLSSocket.h>
 #import <ObjFW/OFException.h>
 
+#import "macros.h"
+
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/ssl.h>
@@ -10,9 +12,9 @@
 @class OFString;
 @class MBEDX509Certificate;
 @class MBEDCRL;
-@class MBEDPrivateKey;
+@class MBEDPKey;
 
-extern const mbedtls_x509_crt_profile kDefaultProfile;
+OBJMBEDTLS_EXPORT const mbedtls_x509_crt_profile kDefaultProfile;
 
 typedef enum {
 	OBJMBED_SSLVERSION_TLSv1 = 0,
@@ -51,7 +53,7 @@ typedef enum {
 - (void)configureCAChainForSocket:(id<OFTLSSocket>)socket;
 - (void)setChainForCA:(MBEDX509Certificate *)ca withCRL:(MBEDCRL *)crl;
 - (void)configureOwnCertificateForSocket:(id<OFTLSSocket>)socket;
-- (void)ownCertificate:(MBEDX509Certificate *)crt privateKey:(MBEDPrivateKey *)pk;
+- (void)ownCertificate:(MBEDX509Certificate *)crt privateKey:(MBEDPKey *)pk;
 - (void)setHostName:(OFString *)host;
 - (void)configureALPN;
 - (void)handshake;
