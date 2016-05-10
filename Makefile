@@ -16,6 +16,7 @@ endif
 endif
 
 mbedtls_source_dir=$(project_dir)library
+objmbedtls_source_dir=$(project_dir)Classes
 
 SOURCES_CRYPTO=	aes.m		aesni.m		arc4.m		\
 		asn1parse.m	asn1write.m	base64.m	\
@@ -51,6 +52,11 @@ SOURCES_TLS=	debug.m		net.m		ssl_cache.m	\
 		ssl_tls.m
 
 SOURCES_TLS_LIST := $(addprefix $(mbedtls_source_dir)/,$(SOURCES_TLS))
+
+SOURCES_OBJFW_SSL_SOCKET= MBEDX509Certificate.m MBEDSSL.m MBEDCRL.m 	\
+						MBEDPKey.m MBEDSSLSocket.m
+
+SOURCES_OBJFW_SSL_SOCKET_LIST := $(addprefix $(objmbedtls_source_dir)/,$(SOURCES_OBJFW_SSL_SOCKET))					
 
 OBJS_CRYPTO=	aes.lib.o		aesni.lib.o		arc4.lib.o		\
 		asn1parse.lib.o	asn1write.lib.o	base64.lib.o	\
@@ -90,12 +96,14 @@ OBJS_TLS_LIST := $(addprefix $(build_dir)/,$(OBJS_TLS))
 CC=i686-w64-mingw32-objfw-compile
 CHDIR=cd
 MOVE=mv
+COPY=cp
 DELETE=rm -rf
 AR=ar
 
 MBEDTLS_X509=mbedx509
 MBEDTLS_TLS=mbedtls
 MBEDTLS_CRYPTO=mbedcrypto
+OBJFW_SSL_SOCKET=objmbedsslsocket
 
 ifeq ($(BUILD_SYS), MINGW32)
 EXECUTABLE_EXTANSION=.exe
@@ -141,9 +149,9 @@ MBEDTLS_INCLUDES_DIR=$(project_dir)include
 .PHONY: all static shared clean
 
 ifndef SHARED
-all: static
+all: static sslsocket
 else
-all: shared static
+all: shared static sslsocket
 endif
 
 MBEDTLS_CRYPTO_STATIC=$(LIBRARY_PREFIX)$(MBEDTLS_CRYPTO)$(STATIC_LIBRARY_EXTENSION)
@@ -154,14 +162,18 @@ MBEDTLS_CRYPTO_SHARED=$(LIBRARY_PREFIX)$(MBEDTLS_CRYPTO)$(SHARED_LIBRARY_EXTANSI
 MBEDTLS_X509_SHARED=$(LIBRARY_PREFIX)$(MBEDTLS_X509)$(SHARED_LIBRARY_EXTANSION)
 MBEDTLS_TLS_SHARED=$(LIBRARY_PREFIX)$(MBEDTLS_TLS)$(SHARED_LIBRARY_EXTANSION)
 
+OBJFW_SSL_SOCKET_LIB=$(LIBRARY_PREFIX)$(OBJFW_SSL_SOCKET)$(SHARED_LIBRARY_EXTANSION)
+
 ifeq ($(BUILD_SYS), MINGW32)
 MBEDTLS_CRYPTO_SHARED_EXPORT=$(MBEDTLS_CRYPTO_SHARED)$(STATIC_LIBRARY_EXTENSION)
 MBEDTLS_X509_SHARED_EXPORT=$(MBEDTLS_X509_SHARED)$(STATIC_LIBRARY_EXTENSION)
 MBEDTLS_TLS_SHARED_EXPORT=$(MBEDTLS_TLS_SHARED)$(STATIC_LIBRARY_EXTENSION)
+OBJFW_SSL_SOCKET_LIB_EXPORT=$(OBJFW_SSL_SOCKET_LIB)$(STATIC_LIBRARY_EXTENSION)
 else
 MBEDTLS_CRYPTO_SHARED_EXPORT=
 MBEDTLS_X509_SHARED_EXPORT=
 MBEDTLS_TLS_SHARED_EXPORT=
+OBJFW_SSL_SOCKET_LIB_EXPORT=
 endif
 
 static: $(MBEDTLS_CRYPTO_STATIC) $(MBEDTLS_X509_STATIC) $(MBEDTLS_TLS_STATIC)
@@ -212,6 +224,20 @@ $(MBEDTLS_TLS_STATIC): $(MBEDTLS_TLS_SHARED) $(OBJS_TLS_LIST)
 	$(CHDIR) $(build_dir) && \
 	$(AR) rc $(MBEDTLS_TLS_STATIC) $(OBJS_CRYPTO) && \
 	$(AR) s $(MBEDTLS_TLS_STATIC)
+	echo -e "\e[1;34mDone.\e[0m"
+
+sslsocket: $(MBEDTLS_CRYPTO_SHARED) $(MBEDTLS_X509_SHARED) $(MBEDTLS_TLS_SHARED) $(MBEDTLS_CRYPTO_STATIC) $(MBEDTLS_X509_STATIC) $(MBEDTLS_TLS_STATIC) $(SOURCES_OBJFW_SSL_SOCKET_LIST)
+	echo -e "\e[1;34mBuilding $(OBJFW_SSL_SOCKET_LIB)...\e[0m"
+	$(CHDIR) $(objmbedtls_source_dir) && \
+	$(COPY) $(build_dir)/$(MBEDTLS_TLS_STATIC) $(objmbedtls_source_dir) && \
+	$(COPY) $(build_dir)/$(MBEDTLS_X509_STATIC) $(objmbedtls_source_dir) && \
+	$(COPY) $(build_dir)/$(MBEDTLS_CRYPTO_STATIC) $(objmbedtls_source_dir) && \
+	$(CC) --builddir $(build_dir) $(SOURCES_OBJFW_SSL_SOCKET) -I$(MBEDTLS_INCLUDES_DIR) -I$(objmbedtls_source_dir) --lib 0.9 -o $(OBJFW_SSL_SOCKET) -L$(build_dir) -l$(MBEDTLS_CRYPTO) -l$(MBEDTLS_X509) -l$(MBEDTLS_TLS) && \
+	$(MOVE) $(OBJFW_SSL_SOCKET_LIB) $(build_dir) && \
+	$(MOVE) $(OBJFW_SSL_SOCKET_LIB_EXPORT) $(build_dir) && \
+	$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_TLS_STATIC) && \
+	$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_X509_STATIC) && \
+	$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_CRYPTO_STATIC)
 	echo -e "\e[1;34mDone.\e[0m"
 
 clean:

@@ -350,31 +350,6 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	[_SSL writeBuffer:buffer length:length];
 }
 
-- (OFString*)certificateFileForSNIHost: (OFString*)SNIHost
-{
-	/* TODO */
-	OF_UNRECOGNIZED_SELECTOR
-}
-
-- (OFString*)privateKeyFileForSNIHost: (OFString*)SNIHost
-{
-	/* TODO */
-	OF_UNRECOGNIZED_SELECTOR
-}
-
-- (void)setPrivateKeyPassphrase: (const char*)privateKeyPassphrase
-		     forSNIHost: (OFString*)SNIHost
-{
-	/* TODO */
-	OF_UNRECOGNIZED_SELECTOR
-}
-
-- (const char*)privateKeyPassphraseForSNIHost: (OFString*)SNIHost
-{
-	/* TODO */
-	OF_UNRECOGNIZED_SELECTOR
-}
-
 - (MBEDX509Certificate *)peerCertificate
 {
 	if (_peerCertificate == nil) {

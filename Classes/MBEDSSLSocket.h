@@ -47,12 +47,6 @@
 
 - (instancetype)initWithSocket:(OFTCPSocket*)socket;
 - (void)startTLSWithExpectedHost:(nullable OFString*)host;
-- (void)setCertificateFile:(OFString*)certificateFile forSNIHost:(OFString*)SNIHost;
-- (nullable OFString*)certificateFileForSNIHost:(OFString*)SNIHost;
-- (void)setPrivateKeyFile:(OFString*)privateKeyFile forSNIHost:(OFString*)SNIHost;
-- (nullable OFString*)privateKeyFileForSNIHost:(OFString*)SNIHost;
-- (void)setPrivateKeyPassphrase:(const char*)privateKeyPassphrase forSNIHost:(OFString*)SNIHost;
-- (nullable const char*)privateKeyPassphraseForSNIHost:(OFString*)SNIHost;
 - (MBEDX509Certificate *)peerCertificate;
 
 @end
