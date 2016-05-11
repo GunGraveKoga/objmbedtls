@@ -49,7 +49,7 @@ typedef enum {
 - (void)setDefaultTCPServerConfig;
 - (void)setCertificateProfile:(const mbedtls_x509_crt_profile)profile;
 - (void)setConfigSSLVersion:(objmbed_ssl_version_t)version;
-- (void)configureSocket:(id<OFTLSSocket>)socket;
+- (void)configureBIOSocket:(id<OFTLSSocket>)socket;
 - (void)configureCAChainForSocket:(id<OFTLSSocket>)socket;
 - (void)setChainForCA:(MBEDX509Certificate *)ca withCRL:(MBEDCRL *)crl;
 - (void)configureOwnCertificateForSocket:(id<OFTLSSocket>)socket;

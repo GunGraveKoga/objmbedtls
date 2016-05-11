@@ -9,37 +9,13 @@
 
 @interface MBEDSSLSocket()
 
-- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port isClient:(bool)isClient;
+- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port asClient:(bool)client;
+- (void)SSL_serverHost:(OFString *)host certificateVerificationWithCA:(bool)flag;
+- (void)SSL_clientHost:(OFString *)host certificateVerificationWithCA:(bool)flag;
 - (void)reinit_SSL;
+- (void)SSL_super_close;
 
 @end
-
-static int objmbed_verify( void *data, mbedtls_x509_crt *crt, int depth, uint32_t *flags )
-{
-    char buf[1024];
-    ((void) data);
-
-    of_log( @"Verify requested for (Depth %d):", depth );
-    mbedtls_x509_crt_info( buf, sizeof( buf ) - 1, "", crt );
-    of_log( @"%s", buf );
-
-    if ( ( *flags ) == 0 )
-        of_log( @"  This certificate has no flags" );
-    else
-    {
-        mbedtls_x509_crt_verify_info( buf, sizeof( buf ), "  ! ", *flags );
-        of_log( @"%s\n", buf );
-    }
-
-    return( 0 );
-}
-
-static void objmbed_debug( void *ctx, int level, const char *file, int line, const char *str )
-{
-    ((void) level);
-
-    of_log( @"%s:%04d: %s", file, line, str );
-}
 
 
 @implementation MBEDSSLSocket
@@ -54,6 +30,7 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 @synthesize CRL = _CRL;
 @synthesize clientCertificate = _clientCertificate;
 @synthesize PK = _PK;
+@synthesize certificateProfile = _certificateProfile;
 @dynamic sslVersion;
 
 @dynamic context;
@@ -85,8 +62,11 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	_PK = [MBEDPKey new];
 	_peerCertificate = nil;
 	_sslVersion = OBJMBED_SSLVERSION_SSLv3;
+	_certificateProfile = kDefaultProfile;
 
 	mbedtls_net_init(self.context);
+
+	_isSSLServer = false;
 
 	return self;
 
@@ -115,6 +95,25 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 		[self release];
 		@throw e;
 	}
+
+	return self;
+}
+
+- (instancetype)initWithAcceptedSocket:(OFTCPSocket *)socket
+{
+	self = [self init];
+
+	@try {
+		if ((_socket = dup(socket->_socket)) <= 0) {
+			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
+
+		}
+	} @catch (id e) {
+		[self release];
+		@throw e;
+	}
+
+	_isSSLServer = true;
 
 	return self;
 }
@@ -178,7 +177,11 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	_certificateVerificationEnabled = enabled;
 }
 
-- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port isClient:(bool)isClient
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wobjc-method-access"
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
+
+- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port asClient:(bool)client
 {
 	bool CAChainVerification = false;
 	
@@ -200,22 +203,23 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 	self.context->fd = (int)_socket;
 
 	@try {
-		if (isClient)
+		if (client)
 			[_SSL setDefaultTCPClientConfig];
 		else
 			[_SSL setDefaultTCPServerConfig];
 
-		[_SSL setCertificateProfile:kDefaultProfile];
+		[_SSL setCertificateProfile:self.certificateProfile];
 
 		[_SSL setConfigSSLVersion:self.sslVersion];
 
-		[_SSL configureSocket:self];
+		[_SSL configureBIOSocket:self];
 
 		[_SSL configureCAChainForSocket:self];
 
 		[_SSL configureOwnCertificateForSocket:self];
 
-		[_SSL setHostName:host];
+		if (client)
+			[_SSL setHostName:host];
 
 	} @catch(id e) {
 		[super close];
@@ -230,10 +234,20 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 		@throw e;
 	}
 
+	if (client)
+		[self SSL_serverHost:host certificateVerificationWithCA:CAChainVerification];
+	else
+		[self SSL_clientHost:host certificateVerificationWithCA:CAChainVerification];
+	
+	
+}
 
+
+- (void)SSL_serverHost:(OFString *)host certificateVerificationWithCA:(bool)flag
+{
 	if (self.isCertificateVerificationEnabled) {
 		int res = 0;
-		if (CAChainVerification) {
+		if (flag) {
 			res = [_SSL peerCertificateVerified];
 			if (res != 0) {
 				if (self.delegate != nil) {
@@ -266,7 +280,11 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 		@throw [MBEDSSLCertificateVerificationFailedException exceptionWithCode:res certificate:[self peerCertificate]];
 		
 	}
-	
+}
+
+- (void)SSL_clientHost:(OFString *)host certificateVerificationWithCA:(bool)flag
+{
+
 }
 
 - (void)close
@@ -280,19 +298,24 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 
 }
 
+- (void)SSL_super_close
+{
+	[super close];
+}
+
 - (void)startTLSWithExpectedHost:(nullable OFString*)host
 {
-	if ([self isListening])
-		[self SSL_startTLSWithExpectedHost:host port:0 isClient:false];
+	if (_isSSLServer)
+		[self SSL_startTLSWithExpectedHost:host port:0 asClient:false];
 	else
-		[self SSL_startTLSWithExpectedHost:host port:0 isClient:true];
+		[self SSL_startTLSWithExpectedHost:host port:0 asClient:true];
 }
 
 - (void)connectToHost: (OFString*)host port: (uint16_t)port
 {
 	[super connectToHost: host port: port];
 
-	[self SSL_startTLSWithExpectedHost:host port:port isClient:true];
+	[self SSL_startTLSWithExpectedHost:host port:port asClient:true];
 }
 
 - (instancetype)accept
@@ -356,6 +379,38 @@ static void objmbed_debug( void *ctx, int level, const char *file, int line, con
 		_peerCertificate = [[MBEDX509Certificate alloc] initWithX509Struct:[_SSL peerCertificate]];
 	}
 	return _peerCertificate;
+}
+#pragma clang diagnostic pop
+
+//Not implemented
+- (nullable OFString*)privateKeyFileForSNIHost:(OFString *)SNIHost
+{
+	OF_UNRECOGNIZED_SELECTOR
+}
+
+- (nullable const char*)privateKeyPassphraseForSNIHost:(OFString*)SNIHost
+{
+	OF_UNRECOGNIZED_SELECTOR
+}
+
+- (void)setPrivateKeyPassphrase:(const char*)privateKeyPassphrase forSNIHost:(OFString*)SNIHost
+{
+	OF_UNRECOGNIZED_SELECTOR
+}
+
+- (void)setPrivateKeyFile:(OFString*)privateKeyFile forSNIHost:(OFString*)SNIHost
+{
+	OF_UNRECOGNIZED_SELECTOR
+}
+
+- (nullable OFString*)certificateFileForSNIHost: (OFString*)SNIHost
+{
+	OF_UNRECOGNIZED_SELECTOR
+}
+
+- (void)setCertificateFile:(OFString*)certificateFile forSNIHost:(OFString*)SNIHost
+{
+	OF_UNRECOGNIZED_SELECTOR
 }
 
 @end

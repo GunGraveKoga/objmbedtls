@@ -101,6 +101,10 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 		@throw [OFInvalidArgumentException exception];
 	}
 
+	mbedtls_ssl_conf_authmode(self.config, MBEDTLS_SSL_VERIFY_OPTIONAL);
+	mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg);
+	mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
+
 	_configured = true;
 }
 
@@ -152,17 +156,17 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wobjc-method-access"
 
-- (void)configureSocket:(id<OFTLSSocket>)socket
+- (void)configureBIOSocket:(id<OFTLSSocket>)socket
 {
 	if (![socket isKindOfClass:[MBEDSSLSocket class]])
 		@throw [OFInvalidArgumentException exception];
 
 	MBEDSSLSocket* sslSocket = (MBEDSSLSocket *)socket;
 
-	mbedtls_ssl_conf_authmode(self.config, MBEDTLS_SSL_VERIFY_OPTIONAL);
-	mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg);
+	//mbedtls_ssl_conf_authmode(self.config, MBEDTLS_SSL_VERIFY_OPTIONAL);
+	//mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg);
   	mbedtls_ssl_set_bio(self.context, sslSocket.context, mbedtls_net_send, mbedtls_net_recv, NULL);
-  	mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
+  	//mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
 
   	//if ( (mbedtls_ssl_set_session(self.context, ssl_session);) != 0) {
   		//@throw [OFException exception];
