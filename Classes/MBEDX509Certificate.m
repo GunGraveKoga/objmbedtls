@@ -235,6 +235,9 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 - (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt
 {
+	if (crt == NULL)
+		@throw [OFInvalidArgumentException exception];
+
 	self = [self init];
 
 	//memcpy(self.certificate, crt, sizeof(mbedtls_x509_crt));

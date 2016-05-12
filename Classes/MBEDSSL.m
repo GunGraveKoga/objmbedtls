@@ -57,6 +57,29 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	return self;
 }
 
+- (instancetype)initWithConfig:(mbedtls_ssl_config *)config
+{
+	self = [super init];
+
+	_configured = false;
+	_cipherSuite = nil;
+
+	mbedtls_ssl_init( self.context );
+	mbedtls_ssl_config_init( self.config );
+
+	memcpy(self.config, config, sizeof(mbedtls_ssl_config));
+
+	if ( (mbedtls_ssl_setup(self.context, self.config)) != 0) {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSL class]];
+	}
+
+	_configured = true;
+
+	return self;
+
+}
+
 - (void)dealloc
 {
 	mbedtls_ssl_free( self.context );
@@ -180,6 +203,31 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 	MBEDSSLSocket* sslSocket = (MBEDSSLSocket *)socket;
 
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	@try {
+		if (sslSocket.CA == nil) {
+			sslSocket.CA = [MBEDX509Certificate certificate];
+
+			if (sslSocket.certificateAuthorityFile != nil)
+				[sslSocket.CA parseFile:sslSocket.certificateAuthorityFile];
+
+		}
+
+		if (sslSocket.CRL == nil) {
+			sslSocket.CRL = [MBEDCRL crl];
+
+			if (sslSocket.certificateRevocationListFile != nil)
+				[sslSocket.CRL parseFile:sslSocket.certificateRevocationListFile];
+		
+		}
+	}@catch(id e) {
+		[pool release];
+		@throw e;
+	}
+
+	[pool release];
+
 	[self setChainForCA:sslSocket.CA withCRL:sslSocket.CRL];
 }
 
@@ -195,7 +243,31 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 	MBEDSSLSocket* sslSocket = (MBEDSSLSocket *)socket;
 
-	[self ownCertificate:sslSocket.clientCertificate privateKey:sslSocket.PK];
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	@try {
+		if (sslSocket.ownCertificate == nil) {
+			sslSocket.ownCertificate = [MBEDX509Certificate certificate];
+
+			if (sslSocket.certificateFile != nil)
+				[sslSocket.ownCertificate parseFile:sslSocket.certificateFile];
+		}
+
+		if (sslSocket.PK == nil) {
+			sslSocket.PK = [MBEDPKey key];
+
+			if (sslSocket.privateKeyFile != nil)
+				[sslSocket.PK parsePrivateKeyFile:sslSocket.privateKeyFile password:[OFString stringWithUTF8String:sslSocket.privateKeyPassphrase]];
+		}
+
+	}@catch(id e) {
+		[pool release];
+		@throw e;
+	}
+
+	[pool release];
+
+	[self ownCertificate:sslSocket.ownCertificate privateKey:sslSocket.PK];
 }
 
 #pragma clang diagnostic pop
@@ -225,6 +297,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 	while( ( ret = mbedtls_ssl_handshake( self.context ) ) != 0 ) {
 		if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE ) {
+			of_log(@"Handshake error -0x%04x", -ret);
 			@throw [OFException exception];
 		}
 	}
@@ -269,6 +342,17 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 - (void)notifyPeerToClose
 {
 	mbedtls_ssl_close_notify(self.context);
+}
+
+- (void)resetSession
+{
+	if ((mbedtls_ssl_session_reset(self.context)) != 0)
+		@throw [OFException exception]; //TODO: throw reset exception
+}
+
+- (size_t)bytesAvailable
+{
+	return mbedtls_ssl_get_bytes_avail(self.context);
 }
 
 @end

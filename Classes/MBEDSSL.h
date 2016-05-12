@@ -43,6 +43,7 @@ typedef enum {
 @property(copy, readonly)OFString* cipherSuite;
 
 + (instancetype)ssl;
+- (instancetype)initWithConfig:(mbedtls_ssl_config *)config;
 
 - (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset;
 - (void)setDefaultTCPClientConfig;
@@ -62,6 +63,8 @@ typedef enum {
 - (void)writeBuffer:(const void*)buffer length:(size_t)length;
 - (ssize_t)readIntoBuffer:(void*)buffer length:(size_t)length;
 - (void)notifyPeerToClose;
+- (void)resetSession;
+- (size_t)bytesAvailable;
 
 @end
 

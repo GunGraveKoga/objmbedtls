@@ -100,6 +100,22 @@ OF_APPLICATION_DELEGATE(Test)
 			of_log(@"%@", l);
 		}
 	[sk close];
+
+	of_log(@"Start TLS with connected socket:\n\n");
+
+	[sk connectToHost:@"google.com" port:443];
+
+	MBEDSSLSocket* sks = [[[MBEDSSLSocket alloc] initWithSocket:sk] autorelease];
+
+	[sks startTLSWithExpectedHost:@"google.com"];
+
+	[sks writeLine:@"GET / HTTP/1.0\r\n"];
+
+	while (!sks.isAtEndOfStream) {
+		OFString* l = [sks readLine];
+		of_log(@"%@", l);
+	}
+	[sks close];
 }
 
 @end

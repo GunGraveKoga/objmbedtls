@@ -317,6 +317,11 @@
 	return [[[self alloc] initWithStruct:context isPublic:flag] autorelease];
 }
 
++ (instancetype)key
+{
+	return [[[self alloc] init] autorelease];
+}
+
 - (OFString *)description
 {
 	OFMutableString* desc = [OFMutableString string];

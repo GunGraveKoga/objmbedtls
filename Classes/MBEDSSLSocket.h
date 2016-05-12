@@ -3,6 +3,7 @@
 #import <ObjFW/OFTLSSocket.h>
 #import <ObjFW/OFException.h>
 #import "MBEDSSL.h"
+#import "macros.h"
 
 #include <mbedtls/net.h>
 
@@ -14,9 +15,9 @@
 @interface MBEDSSLSocket: OFTCPSocket<OFTLSSocket>
 {
     MBEDX509Certificate* _CA;
-    MBEDX509Certificate* _clientCertificate;
     MBEDCRL* _CRL;
     MBEDPKey* _PK;
+    MBEDX509Certificate* _ownCertificate;
     MBEDSSL* _SSL;
 
     mbedtls_net_context _context;
@@ -25,6 +26,8 @@
     OFString* _certificateFile;
     OFString* _privateKeyFile;
     const char *_privateKeyPassphrase;
+    OFString* _certificateAuthorityFile;
+    OFString* _certificateRevocationListFile;
     bool _certificateVerificationEnabled;
     objmbed_ssl_version_t _sslVersion;
     mbedtls_x509_crt_profile _certificateProfile;
@@ -34,10 +37,10 @@
     MBEDX509Certificate* _peerCertificate;
 }
 
-@property (retain, readwrite)MBEDX509Certificate* CA;
-@property (retain, readwrite)MBEDCRL* CRL;
-@property (retain, readwrite)MBEDX509Certificate* clientCertificate;
-@property (retain, readwrite)MBEDPKey* PK;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* CA;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDCRL* CRL;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDPKey* PK;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* ownCertificate;
 
 @property (assign, readonly)mbedtls_net_context* context;
 @property (assign, readwrite)mbedtls_x509_crt_profile certificateProfile;
@@ -46,13 +49,15 @@
 @property OF_NULLABLE_PROPERTY (copy) OFString *certificateFile;
 @property OF_NULLABLE_PROPERTY (copy) OFString *privateKeyFile;
 @property OF_NULLABLE_PROPERTY (assign) const char *privateKeyPassphrase;
+@property OF_NULLABLE_PROPERTY (copy) OFString* certificateAuthorityFile;
+@property OF_NULLABLE_PROPERTY (copy) OFString* certificateRevocationListFile;
 @property (getter=isCertificateVerificationEnabled)bool certificateVerificationEnabled;
 @property (assign, readwrite)objmbed_ssl_version_t sslVersion;
 
 - (instancetype)initWithSocket:(OFTCPSocket *)socket;
 - (instancetype)initWithAcceptedSocket:(OFTCPSocket *)socket;
 - (void)startTLSWithExpectedHost:(nullable OFString*)host;
-- (MBEDX509Certificate *)peerCertificate;
+- (nullable MBEDX509Certificate *)peerCertificate;
 
 //Not imlemented
 - (nullable OFString*)privateKeyFileForSNIHost:(OFString *)SNIHost;

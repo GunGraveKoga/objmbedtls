@@ -39,5 +39,6 @@
 + (instancetype)keyWithPEM:(OFString *)PEMString password:(OFString *)password isPublic:(bool)flag;
 + (instancetype)keyWithDER:(OFDataArray *)DERData password:(OFString *)password isPublic:(bool)flag;
 + (instancetype)keyWithStruct:(mbedtls_pk_context *)context isPublic:(bool)flag;
++ (instancetype)key;
 
 @end
