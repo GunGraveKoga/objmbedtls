@@ -5,11 +5,6 @@
 #import "MBEDPKey.h"
 #import "MBEDSSL.h"
 
-static unsigned long
-get_thread_id(void)
-{
-	return (unsigned long)(uintptr_t)[OFThread currentThread];
-}
 
 @interface Test: OFObject<OFApplicationDelegate>
 {
@@ -107,6 +102,8 @@ OF_APPLICATION_DELEGATE(Test)
 
 	MBEDSSLSocket* sks = [[[MBEDSSLSocket alloc] initWithSocket:sk] autorelease];
 
+	[sk close]; //Closing original socket to check socket duplication
+
 	[sks startTLSWithExpectedHost:@"google.com"];
 
 	[sks writeLine:@"GET / HTTP/1.0\r\n"];
@@ -116,6 +113,39 @@ OF_APPLICATION_DELEGATE(Test)
 		of_log(@"%@", l);
 	}
 	[sks close];
+
+	of_log(@"Async connect:\n\n");
+	
+	MBEDSSLSocket* con = [MBEDSSLSocket socket];
+	con.sslVersion = OBJMBED_SSLVERSION_TLSv1;
+	__block bool async_end = false;
+	[con asyncConnectToHost:@"google.com" port:443 block:^(OFTCPSocket *socket, OFException *_Nullable exception){
+
+		if (exception) {
+			of_log(@"Async connect exception: %@", exception);
+			return;
+		}
+
+		MBEDSSLSocket* sock = (MBEDSSLSocket*)socket;
+		
+		[sock writeLine:@"GET / HTTP/1.0\r\n"];
+
+		while (!sock.isAtEndOfStream) {
+			OFString* l = [sock readLine];
+			of_log(@"%@", l);
+		}
+		[sock close];
+
+		async_end = true;
+
+	}];
+
+	[OFTimer scheduledTimerWithTimeInterval:0.5 repeats:true block:^(OFTimer *timer){
+		if (async_end)
+			[OFApplication terminate];
+
+		return;
+	}];
 }
 
 @end
