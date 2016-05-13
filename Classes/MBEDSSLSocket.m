@@ -7,10 +7,6 @@
 #include <mbedtls/certs.h>
 #include <mbedtls/threading.h>
 
-#if defined(OF_WINDOWS)
-#define dup(x) _dup(x)
-#define dup2(x, y) _dup2(x, y)
-#endif
 
 @interface MBEDSSLSocket()
 
@@ -31,6 +27,8 @@
 @synthesize certificateAuthorityFile = _certificateAuthorityFile;
 @synthesize certificateRevocationListFile = _certificateRevocationListFile;
 @dynamic certificateVerificationEnabled;
+@dynamic requestClientCertificatesEnabled;
+@dynamic SSL;
 
 @synthesize CA = _CA;
 @synthesize CRL = _CRL;
@@ -60,6 +58,7 @@
 	self.delegate = nil;
 	self.privateKeyFile = nil;
 	self.certificateVerificationEnabled = true;
+	self.requestClientCertificatesEnabled = false;
 	self.certificateFile = nil;
 	self.privateKeyPassphrase = NULL;
 	self.certificateAuthorityFile = nil;
@@ -100,19 +99,30 @@
 - (instancetype)initWithSocket:(OFTCPSocket *)socket
 {
 	self = [self init];
-	of_log(@"s1 %d", socket->_socket);
 
 	@try {
-		if ((dup2(socket->_socket, self->_socket)) != 0) {
+#if defined(OF_WINDOWS)
+		WSAPROTOCOL_INFOW protInfo;
+
+		if ((WSADuplicateSocketW((SOCKET)socket->_socket, GetCurrentProcessId(), &protInfo)) != 0)
+			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
+
+		_socket = WSASocketW(AF_INET, SOCK_STREAM, 0, &protInfo, 0, WSA_FLAG_OVERLAPPED);
+
+		if (_socket == INVALID_SOCKET)
+			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
+#else
+		if ((_socket = dup(socket->_socket)) <= 0) {
 			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
 
 		}
-		of_log(@"s2 %d", self->_socket);
+#endif		
+		
 	} @catch (id e) {
 		[self release];
 		@throw e;
 	}
-	of_log(@"s2 %d", self->_socket);
+	
 	return self;
 }
 
@@ -121,10 +131,22 @@
 	self = [self init];
 
 	@try {
+#if defined(OF_WINDOWS)
+		WSAPROTOCOL_INFOW protInfo;
+
+		if ((WSADuplicateSocketW((SOCKET)socket->_socket, GetCurrentProcessId(), &protInfo)) != 0)
+			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
+
+		_socket = WSASocketW(AF_INET, SOCK_STREAM, 0, &protInfo, 0, WSA_FLAG_OVERLAPPED);
+
+		if (_socket == INVALID_SOCKET)
+			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
+#else
 		if ((_socket = dup(socket->_socket)) <= 0) {
 			@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
 
 		}
+#endif
 	} @catch (id e) {
 		[self release];
 		@throw e;
@@ -194,6 +216,16 @@
 	_certificateVerificationEnabled = enabled;
 }
 
+- (bool)isRequestClientCertificatesEnabled
+{
+	return _requestClientCertificatesEnabled;
+}
+
+- (void)setRequestClientCertificatesEnabled:(bool)enabled
+{
+	_requestClientCertificatesEnabled = enabled;
+}
+
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wobjc-method-access"
@@ -208,8 +240,12 @@
 	@try {
 		if (client)
 			[_SSL setDefaultTCPClientConfig];
-		else
-			[_SSL setDefaultTCPServerConfig];
+		else {
+			if (self.isRequestClientCertificatesEnabled)
+				[_SSL setTCPServerConfigWithClientCertificate];
+			else
+				[_SSL setDefaultTCPServerConfig];
+		}
 
 		[_SSL setCertificateProfile:self.certificateProfile];
 
@@ -223,7 +259,7 @@
 		if (client)
 			[_SSL setHostName:host];
 
-		if (self.CA.version != 0 && self.CRL.context->version != 0) {
+		if (self.CA.version != 0) {
 			if (!self.CA.isCA) {
 				@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
 			}
@@ -242,6 +278,7 @@
 	@try {
 		[_SSL handshake];
 	}@catch(id e) {
+		of_log(@"Handshake error: %@", _SSL.lastError);
 		[self close];
 		@throw e;
 	}
@@ -256,11 +293,17 @@
 - (void)SSL_peerCertificateVerificationWithCA:(bool)flag host:(OFString *)host
 {
 	if (!_isSSLServer && host == nil) {
-		[self close];
-		@throw [OFInvalidArgumentException exception];
+
+		if (self.isCertificateVerificationEnabled) {
+			[self close];
+			@throw [OFInvalidArgumentException exception];
+		}
 	}
 
 	if (self.isCertificateVerificationEnabled) {
+		if (_isSSLServer && !self.isRequestClientCertificatesEnabled)
+			return;
+
 		int res = 0;
 		if (flag) {
 			res = [_SSL peerCertificateVerified];
@@ -335,17 +378,17 @@
 
 	[self SSL_startTLSWithExpectedHost:host port:port asClient:true];
 }
-/*
-- (void)listenWithBackLog:(int)backLog	
-{
-	[super listenWithBackLog:backlog];
 
-	if (self.PK == nil || self.ownCertificate == nil || self.CA == nil)
-		@throw [OFListenFailedException exceptionWithSocket:self backLog:backLog errNo:0];
+- (void)listenWithBackLog: (int)backLog
+{
+	[super listenWithBackLog:backLog];
 
 	@try {
 
-		[_SSL setDefaultTCPServerConfig];
+		if (self.isRequestClientCertificatesEnabled)
+			[_SSL setTCPServerConfigWithClientCertificate];
+		else
+			[_SSL setDefaultTCPServerConfig];
 
 		[_SSL setCertificateProfile:self.certificateProfile];
 
@@ -355,6 +398,9 @@
 
 		[_SSL configureOwnCertificateForSocket:self];
 
+		if (self.PK == nil || self.ownCertificate == nil || self.CA == nil)
+			@throw [OFListenFailedException exceptionWithSocket:self backLog:backLog errNo:0];
+
 	}@catch(id e) {
 		[super close];
 		[self reinit_SSL];
@@ -362,10 +408,81 @@
 	}
 }
 
+
 - (instancetype)accept
 {
+	MBEDSSLSocket* client = (MBEDSSLSocket *)[super accept];//[[[MBEDSSLSocket alloc] initWithAcceptedSocket:[super accept]] autorelease];
 	
-}*/
+	[client->_SSL release];
+
+	@try {
+		client->_SSL = [[MBEDSSL alloc] initWithConfig:self->_SSL.config];
+
+	}@catch(id e) {
+		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:0];
+	}
+
+	bool CAChainVerification = false;
+
+	if (self.CA.version != 0) {
+		if (!self.CA.isCA) {
+			@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
+		}
+
+		CAChainVerification = true;
+	}
+
+	client->_isSSLServer = true;
+	client.certificateVerificationEnabled = self.certificateVerificationEnabled;
+	client.requestClientCertificatesEnabled = self.requestClientCertificatesEnabled;
+	client.PK = self.PK;
+	client.CA = self.CA;
+	client.CRL = self.CRL;
+	client.ownCertificate = self.ownCertificate;
+	client.delegate = self.delegate;
+	client.context->fd = (int)client->_socket;
+
+	[client->_SSL configureBIOSocket:client];
+
+	of_log(@"Client internal accepted %@ %d", client, [client fileDescriptorForReading]);
+
+	@try {
+		[client->_SSL handshake];
+	}@catch(id e) {
+		of_log(@"Handshake error: %@", client->_SSL.lastError);
+		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:of_socket_errno()];
+	}
+
+	@try {
+		[client SSL_peerCertificateVerificationWithCA:CAChainVerification host:nil];
+	}@catch(id e) {
+		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:0];
+	}
+
+	/*
+	client.certificateVerificationEnabled = self.certificateVerificationEnabled;
+	client.requestClientCertificatesEnabled = self.requestClientCertificatesEnabled;
+	client.PK = self.PK;
+	client.CA = self.CA;
+	client.CRL = self.CRL;
+	client.ownCertificate = self.ownCertificate;
+	client.delegate = self.delegate;
+	client.sslVersion = self.sslVersion;
+	client.certificateProfile = self.certificateProfile;
+	client.certificateFile = self.certificateFile;
+	client.privateKeyFile = self.privateKeyFile;
+	client.privateKeyPassphrase = self.privateKeyPassphrase;
+	client.certificateAuthorityFile = self.certificateAuthorityFile;
+	client.certificateRevocationListFile = self.certificateRevocationListFile;
+
+	@try {
+		[client SSL_startTLSWithExpectedHost:nil port:0 asClient:false];
+	}@catch(id e) {
+		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:0];
+	}*/
+
+	return client;
+}
 
 - (size_t)lowlevelReadIntoBuffer: (void*)buffer length: (size_t)length
 {
@@ -438,6 +555,11 @@
 		_peerCertificate = [[MBEDX509Certificate alloc] initWithX509Struct:peerCrt];
 	}
 	return _peerCertificate;
+}
+
+- (MBEDSSL *)SSL
+{
+	return _SSL;
 }
 #pragma clang diagnostic pop
 

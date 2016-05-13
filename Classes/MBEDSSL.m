@@ -5,6 +5,8 @@
 #import "MBEDPKey.h"
 #import "MBEDCRL.h"
 
+#include <mbedtls/error.h>
+
 const mbedtls_x509_crt_profile kDefaultProfile = {
 	/* Hashes from SHA-1 and above */
   	MBEDTLS_X509_ID_FLAG(MBEDTLS_MD_SHA1) |
@@ -29,6 +31,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 @dynamic config;
 @dynamic ctr_drbg;
 @dynamic entropy;
+@dynamic lastError;
 @synthesize cipherSuite = _cipherSuite;
 
 - (instancetype)init
@@ -53,6 +56,8 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
 	}
 	objc_autoreleasePoolPop(pool);
+
+	_lastError = 0;
 
 	return self;
 }
@@ -114,7 +119,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	return &_entropy;
 }
 
-- (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset
+- (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode
 {
 	if ( (mbedtls_ssl_setup(self.context, self.config)) != 0) {
 		@throw [OFException exception];
@@ -124,7 +129,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 		@throw [OFInvalidArgumentException exception];
 	}
 
-	mbedtls_ssl_conf_authmode(self.config, MBEDTLS_SSL_VERIFY_OPTIONAL);
+	mbedtls_ssl_conf_authmode(self.config, mode);
 	mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg);
 	mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
 
@@ -133,12 +138,17 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)setDefaultTCPClientConfig
 {
-	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_CLIENT transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT];
+	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_CLIENT transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
 }
 
 - (void)setDefaultTCPServerConfig
 {
-	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT];
+	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_NONE];
+}
+
+- (void)setTCPServerConfigWithClientCertificate
+{
+	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
 }
 
 - (void)setCertificateProfile:(const mbedtls_x509_crt_profile)profile
@@ -214,13 +224,13 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 		}
 
-		if (sslSocket.CRL == nil) {
-			sslSocket.CRL = [MBEDCRL crl];
+		//if (sslSocket.CRL == nil) {
+			//sslSocket.CRL = [MBEDCRL crl];
 
-			if (sslSocket.certificateRevocationListFile != nil)
-				[sslSocket.CRL parseFile:sslSocket.certificateRevocationListFile];
+			//if (sslSocket.certificateRevocationListFile != nil)
+				//[sslSocket.CRL parseFile:sslSocket.certificateRevocationListFile];
 		
-		}
+		//}
 	}@catch(id e) {
 		[pool release];
 		@throw e;
@@ -233,7 +243,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)setChainForCA:(MBEDX509Certificate *)ca withCRL:(MBEDCRL *)crl
 {
-	mbedtls_ssl_conf_ca_chain(self.config, ca.certificate, crl.context);
+	mbedtls_ssl_conf_ca_chain(self.config, ca.certificate, (crl != nil) ? crl.context : NULL);
 }
 
 - (void)configureOwnCertificateForSocket:(id<OFTLSSocket>)socket
@@ -297,7 +307,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 	while( ( ret = mbedtls_ssl_handshake( self.context ) ) != 0 ) {
 		if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE ) {
-			of_log(@"Handshake error -0x%04x", -ret);
+			_lastError = ret;
 			@throw [OFException exception];
 		}
 	}
@@ -353,6 +363,15 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 - (size_t)bytesAvailable
 {
 	return mbedtls_ssl_get_bytes_avail(self.context);
+}
+
+- (OFString *)lastError
+{
+	char buf[4096] = {0};
+
+	mbedtls_strerror( _lastError, buf, sizeof(buf) );
+
+	return [OFString stringWithUTF8String:(const char *)buf];
 }
 
 @end

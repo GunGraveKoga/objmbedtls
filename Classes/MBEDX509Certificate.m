@@ -175,6 +175,16 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	return [[[self alloc] initWithX509Struct:crt] autorelease];
 }
 
++ (instancetype)certificatesWithData:(OFDataArray *)data
+{
+	return [[[self alloc] initWithCertificatesData:data] autorelease];
+}
+
++ (instancetype)certificateWithDERData:(OFDataArray *)data
+{
+	return [[[self alloc] initWithCertificateDERData:data] autorelease];
+}
+
 - (instancetype)init
 {
 	self = [super init];
@@ -235,14 +245,59 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 - (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt
 {
-	if (crt == NULL)
-		@throw [OFInvalidArgumentException exception];
 
 	self = [self init];
+
+	if (crt == NULL) {
+		[self release];
+		@throw [OFInvalidArgumentException exception];
+	}
 
 	//memcpy(self.certificate, crt, sizeof(mbedtls_x509_crt));
 
 	if ((mbedtls_x509_crt_parse_der(self.certificate, crt->raw.p, crt->raw.len)) != 0) {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
+
+	[self X509_fillProperties];
+
+	return self;
+}
+
+- (instancetype)initWithCertificatesData:(OFDataArray *)data
+{
+	self = [self init];
+
+	if ([data count] <= 0) {
+		[self release];
+		@throw [OFInvalidArgumentException exception];
+	}
+
+	int ret = 0;
+
+	if ((ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) < 0) {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
+
+	if (ret > 0)
+		of_log(@"%d certificates was parsed!", ret);
+
+	[self X509_fillProperties];
+
+	return self;
+}
+- (instancetype)initWithCertificateDERData:(OFDataArray *)data
+{
+	self = [self init];
+
+	if ([data count] <= 0) {
+		[self release];
+		@throw [OFInvalidArgumentException exception];
+	}
+
+	if ((mbedtls_x509_crt_parse_der(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
 		[self release];
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}

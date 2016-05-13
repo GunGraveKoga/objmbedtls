@@ -34,6 +34,7 @@ typedef enum {
     mbedtls_ssl_config _conf;
     bool _configured;
     OFString* _cipherSuite;
+    int _lastError;
 }
 
 @property(assign, readonly)mbedtls_ssl_context* context;
@@ -41,13 +42,15 @@ typedef enum {
 @property(assign, readonly)mbedtls_ctr_drbg_context* ctr_drbg;
 @property(assign, readonly)mbedtls_entropy_context* entropy;
 @property(copy, readonly)OFString* cipherSuite;
+@property OF_NULLABLE_PROPERTY (copy, readonly)OFString* lastError;
 
 + (instancetype)ssl;
 - (instancetype)initWithConfig:(mbedtls_ssl_config *)config;
 
-- (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset;
+- (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode;
 - (void)setDefaultTCPClientConfig;
 - (void)setDefaultTCPServerConfig;
+- (void)setTCPServerConfigWithClientCertificate;
 - (void)setCertificateProfile:(const mbedtls_x509_crt_profile)profile;
 - (void)setConfigSSLVersion:(objmbed_ssl_version_t)version;
 - (void)configureBIOSocket:(id<OFTLSSocket>)socket;

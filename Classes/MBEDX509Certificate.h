@@ -54,9 +54,13 @@
 + (instancetype)certificateWithFile:(OFString *)file;
 + (instancetype)certificateWithFilesAtPath:(OFString *)path;
 + (instancetype)certificateWithX509Struct:(mbedtls_x509_crt *)crt;
++ (instancetype)certificatesWithData:(OFDataArray *)data;
++ (instancetype)certificateWithDERData:(OFDataArray *)data;
 - (instancetype)initWithFile:(OFString *)file;
 - (instancetype)initWithFilesAtPath:(OFString *)path;
 - (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt;
+- (instancetype)initWithCertificatesData:(OFDataArray *)data;
+- (instancetype)initWithCertificateDERData:(OFDataArray *)data;
 - (void)parseFilesAtPath:(OFString *)path;
 - (void)parseFile:(OFString *)file;
 - (bool)hasCommonNameMatchingDomain: (OFString*)domain;
