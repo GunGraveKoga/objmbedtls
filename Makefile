@@ -105,7 +105,7 @@ AR=ar
 MBEDTLS_X509=mbedx509
 MBEDTLS_TLS=mbedtls
 MBEDTLS_CRYPTO=mbedcrypto
-OBJFW_SSL_SOCKET=tlssocket
+OBJFW_SSL_SOCKET=objmbedsslsocket
 
 ifeq ($(BUILD_SYS), MINGW32)
 EXECUTABLE_EXTANSION=.exe

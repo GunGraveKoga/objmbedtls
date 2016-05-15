@@ -15,7 +15,7 @@
 OF_APPLICATION_DELEGATE(Test)
 
 @implementation Test
-/*
+
 - (void)applicationDidFinishLaunching
 {
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
@@ -71,11 +71,6 @@ OF_APPLICATION_DELEGATE(Test)
 		return true;
 
 	}];
-}*/
-
-- (void)applicationDidFinishLaunching
-{
-	MBEDSSLSocket* sk = [MBEDSSLSocket socket];
 }
 
 @end
