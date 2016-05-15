@@ -15,10 +15,9 @@
 OF_APPLICATION_DELEGATE(Test)
 
 @implementation Test
-
+/*
 - (void)applicationDidFinishLaunching
 {
-	//OFTCPSocket* srv = [OFTCPSocket socket];
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
 	OFDataArray* srv_crt = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
@@ -33,25 +32,19 @@ OF_APPLICATION_DELEGATE(Test)
 	srv.PK = [MBEDPKey keyWithPEM:[OFString stringWithUTF8String:[srv_key items] length:([srv_key count] * [srv_key itemSize])] password:nil isPublic:false];
 	srv.ownCertificate = [MBEDX509Certificate certificatesWithData:srv_crt];
 	srv.sslVersion = OBJMBED_SSLVERSION_TLSv1;
-
+	
 	[srv bindToHost:@"0.0.0.0" port:9999];
 	[srv listen];
 
 	[srv asyncAcceptWithBlock:^bool(OFTCPSocket *socket, OFTCPSocket *acceptedSocket, OFException *_Nullable exception){
 		if (exception) {
-			of_log(@"%@", exception);
+			of_log(@"%@ %@ %d", exception, ((OFAcceptFailedException*)exception).socket, [((OFAcceptFailedException*)exception).socket fileDescriptorForReading]);
 			return true;
 		}
 
 		of_log(@"Connection accepted %@ %d", acceptedSocket, [acceptedSocket fileDescriptorForReading]);
 
-		MBEDSSLSocket* sclient = (MBEDSSLSocket *)acceptedSocket;//[[[MBEDSSLSocket alloc] initWithAcceptedSocket:acceptedSocket] autorelease];
-
-		//sclient.CA = [MBEDX509Certificate certificatesWithData:srv_cas];
-		//sclient.PK = [MBEDPKey keyWithPEM:[OFString stringWithUTF8String:[srv_key items] length:([srv_key count] * [srv_key itemSize])] password:nil isPublic:false];
-		//sclient.ownCertificate = [MBEDX509Certificate certificatesWithData:srv_crt];
-		//sclient.sslVersion = OBJMBED_SSLVERSION_TLSv1;
-		//[sclient startTLSWithExpectedHost:nil];
+		MBEDSSLSocket* sclient = (MBEDSSLSocket *)acceptedSocket;
 
 		[sclient asyncReadLineWithBlock:^bool(OFStream *stream, OFString *_Nullable line, OFException *_Nullable exception){
 			if (exception) {
@@ -78,6 +71,11 @@ OF_APPLICATION_DELEGATE(Test)
 		return true;
 
 	}];
+}*/
+
+- (void)applicationDidFinishLaunching
+{
+	MBEDSSLSocket* sk = [MBEDSSLSocket socket];
 }
 
 @end

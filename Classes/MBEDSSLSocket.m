@@ -3,6 +3,13 @@
 #import "MBEDX509Certificate.h"
 #import "MBEDCRL.h"
 #import "MBEDPKey.h"
+#import "SSLConnectionFailedException.h"
+#import "SSLAcceptFailedException.h"
+#import "SSLWriteFailedException.h"
+#import "SSLReadFailedException.h"
+#import "MBEDTLSException.h"
+#import "SSLCertificateVerificationFailedException.h"
+#import "SSLCertificationAuthorityMissingException.h"
 
 #include <mbedtls/certs.h>
 #include <mbedtls/threading.h>
@@ -68,12 +75,7 @@
 	self.PK = nil;
 	self.ownCertificate = nil;
 	_SSL = [MBEDSSL new];
-	//_CA = [MBEDX509Certificate new];
-	//_CRL = [MBEDCRL new];
-
-	//_PK = [MBEDPKey new];
 	_peerCertificate = nil;
-	//_ownCertificate = nil;
 	_sslVersion = OBJMBED_SSLVERSION_SSLv3;
 	_certificateProfile = kDefaultProfile;
 
@@ -261,7 +263,7 @@
 
 		if (self.CA.version != 0) {
 			if (!self.CA.isCA) {
-				@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
+				@throw [SSLCertificationAuthorityMissingException exceptionWithSocket:self];
 			}
 
 			CAChainVerification = true;
@@ -272,15 +274,27 @@
 	} @catch(id e) {
 		[super close];
 		[self reinit_SSL];
-		@throw [OFConnectionFailedException exceptionWithHost: host port: port socket: self];
+		if (client)
+			if ([e isKindOfClass:[MBEDTLSException class]])
+				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
+			else
+				@throw [SSLConnectionFailedException exceptionWithHost: host port: port socket: self];
+		else
+			@throw e;
 	}
 
 	@try {
 		[_SSL handshake];
 	}@catch(id e) {
-		of_log(@"Handshake error: %@", _SSL.lastError);
+		
 		[self close];
-		@throw e;
+		if (client)
+			if ([e isKindOfClass:[MBEDTLSException class]])
+				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
+			else
+				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self];
+		else
+			@throw e;
 	}
 
 	
@@ -321,7 +335,7 @@
 			if (host != nil) {
 				if (self.peerCertificate == nil) {
 					[self close];
-					@throw [MBEDSSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_MISSING certificate:nil];
+					@throw [SSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_MISSING certificate:nil];
 				}
 
 				if (![self.peerCertificate hasCommonNameMatchingDomain:host]) {
@@ -334,7 +348,7 @@
 							}
 						}
 						[self close];
-						@throw [MBEDSSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_CN_MISMATCH certificate:[self peerCertificate]];
+						@throw [SSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_CN_MISMATCH certificate:[self peerCertificate]];
 					}
 				}
 				return;
@@ -343,7 +357,7 @@
 		}
 
 		[self close];
-		@throw [MBEDSSLCertificateVerificationFailedException exceptionWithCode:res certificate:[self peerCertificate]];
+		@throw [SSLCertificateVerificationFailedException exceptionWithCode:res certificate:[self peerCertificate]];
 		
 	}
 }
@@ -379,87 +393,20 @@
 	[self SSL_startTLSWithExpectedHost:host port:port asClient:true];
 }
 
-- (void)listenWithBackLog: (int)backLog
+- (uint16_t)bindToHost:(OFString*)host port: (uint16_t)port
 {
-	[super listenWithBackLog:backLog];
+	uint16_t port_ = [super bindToHost:host port:port];
 
-	@try {
+	_isSSLServer = true;
 
-		if (self.isRequestClientCertificatesEnabled)
-			[_SSL setTCPServerConfigWithClientCertificate];
-		else
-			[_SSL setDefaultTCPServerConfig];
-
-		[_SSL setCertificateProfile:self.certificateProfile];
-
-		[_SSL setConfigSSLVersion:self.sslVersion];
-
-		[_SSL configureCAChainForSocket:self];
-
-		[_SSL configureOwnCertificateForSocket:self];
-
-		if (self.PK == nil || self.ownCertificate == nil || self.CA == nil)
-			@throw [OFListenFailedException exceptionWithSocket:self backLog:backLog errNo:0];
-
-	}@catch(id e) {
-		[super close];
-		[self reinit_SSL];
-		@throw [OFListenFailedException exceptionWithSocket:self backLog:backLog errNo:0];
-	}
+	return port_;
 }
-
 
 - (instancetype)accept
 {
-	MBEDSSLSocket* client = (MBEDSSLSocket *)[super accept];//[[[MBEDSSLSocket alloc] initWithAcceptedSocket:[super accept]] autorelease];
+	MBEDSSLSocket* client = (MBEDSSLSocket *)[super accept];
 	
-	[client->_SSL release];
-
-	@try {
-		client->_SSL = [[MBEDSSL alloc] initWithConfig:self->_SSL.config];
-
-	}@catch(id e) {
-		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:0];
-	}
-
-	bool CAChainVerification = false;
-
-	if (self.CA.version != 0) {
-		if (!self.CA.isCA) {
-			@throw [MBEDSSLCertificationAuthorityMissingException exceptionWithSocket:self];
-		}
-
-		CAChainVerification = true;
-	}
-
 	client->_isSSLServer = true;
-	client.certificateVerificationEnabled = self.certificateVerificationEnabled;
-	client.requestClientCertificatesEnabled = self.requestClientCertificatesEnabled;
-	client.PK = self.PK;
-	client.CA = self.CA;
-	client.CRL = self.CRL;
-	client.ownCertificate = self.ownCertificate;
-	client.delegate = self.delegate;
-	client.context->fd = (int)client->_socket;
-
-	[client->_SSL configureBIOSocket:client];
-
-	of_log(@"Client internal accepted %@ %d", client, [client fileDescriptorForReading]);
-
-	@try {
-		[client->_SSL handshake];
-	}@catch(id e) {
-		of_log(@"Handshake error: %@", client->_SSL.lastError);
-		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:of_socket_errno()];
-	}
-
-	@try {
-		[client SSL_peerCertificateVerificationWithCA:CAChainVerification host:nil];
-	}@catch(id e) {
-		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:0];
-	}
-
-	/*
 	client.certificateVerificationEnabled = self.certificateVerificationEnabled;
 	client.requestClientCertificatesEnabled = self.requestClientCertificatesEnabled;
 	client.PK = self.PK;
@@ -478,8 +425,13 @@
 	@try {
 		[client SSL_startTLSWithExpectedHost:nil port:0 asClient:false];
 	}@catch(id e) {
-		@throw [OFAcceptFailedException exceptionWithSocket:self errNo:0];
-	}*/
+		if ([e isKindOfClass:[SSLCertificateVerificationFailedException class]])
+			@throw e;
+		else if ([e isKindOfClass:[MBEDTLSException class]])
+			@throw [SSLAcceptFailedException exceptionWithSocket:self errNo:((MBEDTLSException *)e).errNo];
+		else
+			@throw [SSLAcceptFailedException exceptionWithSocket:client errNo:0];
+	}
 
 	return client;
 }
@@ -510,7 +462,7 @@
 	}
 
 	if (ret < 0)
-		@throw [OFReadFailedException exceptionWithObject: self requestedLength: length];
+		@throw [SSLReadFailedException exceptionWithObject:self requestedLength:length errNo:ret];
 
 	if (ret == 0)
 		_atEndOfStream = true;
@@ -530,8 +482,14 @@
 		@throw [OFWriteFailedException exceptionWithObject: self
 						   requestedLength: length
 							     errNo: ENOTCONN];
-
-	[_SSL writeBuffer:buffer length:length];
+	@try {
+		[_SSL writeBuffer:buffer length:length];
+	}@catch(id e){
+		if ([e isKindOfClass:[MBEDTLSException class]])
+			@throw [SSLWriteFailedException exceptionWithObject:self requestedLength:length errNo:((MBEDTLSException*)e).errNo];
+		else
+			@throw e;
+	}
 }
 
 - (bool)hasDataInReadBuffer
@@ -592,33 +550,6 @@
 - (void)setCertificateFile:(OFString*)certificateFile forSNIHost:(OFString*)SNIHost
 {
 	OF_UNRECOGNIZED_SELECTOR
-}
-
-@end
-
-@interface MBEDSSLCertificationAuthorityMissingException()
-
-@property(retain, readwrite)MBEDSSLSocket* socket;
-
-@end
-
-
-@implementation MBEDSSLCertificationAuthorityMissingException
-
-@synthesize socket = _socket;
-
-- (instancetype)initWithSocket:(MBEDSSLSocket *)socket
-{
-	self = [super init];
-
-	self.socket = socket;
-
-	return self;
-}
-
-+ (instancetype)exceptionWithSocket:(MBEDSSLSocket *)socket
-{
-	return [[[self alloc] initWithSocket:socket] autorelease];
 }
 
 @end

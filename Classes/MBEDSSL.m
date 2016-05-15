@@ -4,6 +4,7 @@
 #import "MBEDX509Certificate.h"
 #import "MBEDPKey.h"
 #import "MBEDCRL.h"
+#import "MBEDTLSException.h"
 
 #include <mbedtls/error.h>
 
@@ -31,7 +32,6 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 @dynamic config;
 @dynamic ctr_drbg;
 @dynamic entropy;
-@dynamic lastError;
 @synthesize cipherSuite = _cipherSuite;
 
 - (instancetype)init
@@ -53,36 +53,11 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	if (mbedtls_ctr_drbg_seed(self.ctr_drbg, mbedtls_entropy_func, self.entropy, (const unsigned char *)[pers UTF8String], [pers UTF8StringLength]) != 0) {
 		objc_autoreleasePoolPop(pool);
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSLSocket class]];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSL class]];
 	}
 	objc_autoreleasePoolPop(pool);
 
-	_lastError = 0;
-
 	return self;
-}
-
-- (instancetype)initWithConfig:(mbedtls_ssl_config *)config
-{
-	self = [super init];
-
-	_configured = false;
-	_cipherSuite = nil;
-
-	mbedtls_ssl_init( self.context );
-	mbedtls_ssl_config_init( self.config );
-
-	memcpy(self.config, config, sizeof(mbedtls_ssl_config));
-
-	if ( (mbedtls_ssl_setup(self.context, self.config)) != 0) {
-		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSL class]];
-	}
-
-	_configured = true;
-
-	return self;
-
 }
 
 - (void)dealloc
@@ -121,12 +96,14 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode
 {
-	if ( (mbedtls_ssl_setup(self.context, self.config)) != 0) {
-		@throw [OFException exception];
+	int ret = 0;
+
+	if ( (ret = mbedtls_ssl_setup(self.context, self.config)) != 0) {
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 	}
 
-	if ( (mbedtls_ssl_config_defaults(self.config, endpoint, transport, preset)) != 0) {
-		@throw [OFInvalidArgumentException exception];
+	if ( (ret = mbedtls_ssl_config_defaults(self.config, endpoint, transport, preset)) != 0) {
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 	}
 
 	mbedtls_ssl_conf_authmode(self.config, mode);
@@ -289,8 +266,10 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)setHostName:(OFString *)host
 {
-	if ( (mbedtls_ssl_set_hostname(self.context, [host UTF8String])) != 0) {
-		@throw [OFInvalidArgumentException exception];
+	int ret = 0;
+
+	if ( (ret = mbedtls_ssl_set_hostname(self.context, [host UTF8String])) != 0) {
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 	}
 }
 
@@ -307,8 +286,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 	while( ( ret = mbedtls_ssl_handshake( self.context ) ) != 0 ) {
 		if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE ) {
-			_lastError = ret;
-			@throw [OFException exception];
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 		}
 	}
 
@@ -339,7 +317,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 	while( ( ret = mbedtls_ssl_write( self.context, (unsigned char *)buffer, length ) ) <= 0 ) {
 		if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE ) {
-			@throw [OFWriteFailedException exceptionWithObject: self requestedLength: length];
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 		}
 	}
 }
@@ -356,8 +334,10 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)resetSession
 {
-	if ((mbedtls_ssl_session_reset(self.context)) != 0)
-		@throw [OFException exception]; //TODO: throw reset exception
+	int ret = 0;
+
+	if ((ret = mbedtls_ssl_session_reset(self.context)) != 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 }
 
 - (size_t)bytesAvailable
@@ -365,67 +345,5 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	return mbedtls_ssl_get_bytes_avail(self.context);
 }
 
-- (OFString *)lastError
-{
-	char buf[4096] = {0};
-
-	mbedtls_strerror( _lastError, buf, sizeof(buf) );
-
-	return [OFString stringWithUTF8String:(const char *)buf];
-}
-
-@end
-
-@interface MBEDSSLCertificateVerificationFailedException()
-
-@property(retain, readwrite)MBEDX509Certificate* certificate;
-@property(assign, readwrite)uint32_t verifyCodes;
-
-@end
-
-
-@implementation MBEDSSLCertificateVerificationFailedException
-
-@synthesize certificate = _certificate;
-@synthesize verifyCodes = _verifyCodes;
-
-- (instancetype)initWithCode:(uint32_t)codes certificate:(MBEDX509Certificate *)crt
-{
-	self = [super init];
-
-	self.verifyCodes = codes;
-	self.certificate = crt;
-
-	return self;
-}
-
-- (void)dealloc
-{
-	[_certificate release];
-	[super dealloc];
-}
-
-+ (instancetype)exceptionWithCode:(uint32_t)codes certificate:(MBEDX509Certificate *)crt
-{
-	return [[[self alloc] initWithCode:codes certificate:crt] autorelease];
-}
-
-- (OFString *)description
-{
-	OFMutableString* desc = [OFMutableString stringWithUTF8String:"Certificate vrification failed:\n"];
-
-	char buf[1024];
-
-	int ret = mbedtls_x509_crt_verify_info(buf, 1024, "", _verifyCodes);
-
-	if (ret > 0)
-		[desc appendUTF8String:buf];
-	else
-		[desc appendUTF8String:"Unknown!"];
-
-	[desc makeImmutable];
-
-	return desc;
-}
 
 @end

@@ -1,6 +1,5 @@
 #import <ObjFW/OFObject.h>
 #import <ObjFW/OFTLSSocket.h>
-#import <ObjFW/OFException.h>
 
 #import "macros.h"
 
@@ -34,7 +33,6 @@ typedef enum {
     mbedtls_ssl_config _conf;
     bool _configured;
     OFString* _cipherSuite;
-    int _lastError;
 }
 
 @property(assign, readonly)mbedtls_ssl_context* context;
@@ -42,10 +40,8 @@ typedef enum {
 @property(assign, readonly)mbedtls_ctr_drbg_context* ctr_drbg;
 @property(assign, readonly)mbedtls_entropy_context* entropy;
 @property(copy, readonly)OFString* cipherSuite;
-@property OF_NULLABLE_PROPERTY (copy, readonly)OFString* lastError;
 
 + (instancetype)ssl;
-- (instancetype)initWithConfig:(mbedtls_ssl_config *)config;
 
 - (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode;
 - (void)setDefaultTCPClientConfig;
@@ -68,20 +64,5 @@ typedef enum {
 - (void)notifyPeerToClose;
 - (void)resetSession;
 - (size_t)bytesAvailable;
-
-@end
-
-
-@interface MBEDSSLCertificateVerificationFailedException: OFException
-{
-	uint32_t _verifyCodes;
-	MBEDX509Certificate* _certificate;
-}
-
-@property(retain, readonly)MBEDX509Certificate* certificate;
-@property(assign, readonly)uint32_t verifyCodes;
-
-- (instancetype)initWithCode:(uint32_t)codes certificate:(MBEDX509Certificate *)crt;
-+ (instancetype)exceptionWithCode:(uint32_t)codes certificate:(MBEDX509Certificate *)crt;
 
 @end

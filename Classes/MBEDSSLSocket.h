@@ -71,17 +71,4 @@
 - (nullable OFString*)certificateFileForSNIHost: (OFString*)SNIHost;
 - (void)setCertificateFile:(OFString*)certificateFile forSNIHost:(OFString*)SNIHost;
 
-
-@end
-
-@interface MBEDSSLCertificationAuthorityMissingException: OFException
-{
-    MBEDSSLSocket* _socket;
-}
-
-@property(retain, readonly)MBEDSSLSocket* socket;
-
-- (instancetype)initWithSocket:(MBEDSSLSocket *)socket;
-+ (instancetype)exceptionWithSocket:(MBEDSSLSocket *)socket;
-
 @end
