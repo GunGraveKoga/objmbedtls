@@ -4,6 +4,70 @@
 #import "MBEDX509Certificate.h"
 #import "MBEDPKey.h"
 #import "MBEDSSL.h"
+#import "SSLAcceptFailedException.h"
+
+typedef enum  {
+  None,
+  Certificate,
+  PKCS7,
+  X509CRL
+} OutputType;
+
+const char* GetTypeName(OutputType type)
+{
+
+  switch (type)
+  {
+
+  case Certificate:
+    return "CERTIFICATE";
+
+  case PKCS7:
+    return "PKCS7";
+
+  case X509CRL:
+    return "X509 CRL";
+
+  case None:
+    return NULL;
+
+  default:
+    break;
+
+  }
+
+  return NULL;
+}
+
+
+bool IsPKCS7(DWORD encodeType)
+
+{
+  return ((encodeType & PKCS_7_ASN_ENCODING) == PKCS_7_ASN_ENCODING);
+
+}
+
+void DisplayPEM(OutputType outputType, BYTE const* pData, DWORD cbLength)
+
+{
+ char const* type = GetTypeName(outputType);
+
+ if ( type == NULL ) return;
+
+	/*OFMutableString* crt = [OFMutableString string];
+	OFDataArray* dt = [OFDataArray dataArrayWithItemSize:sizeof(char)];
+	[crt appendFormat:@"-----BEGIN %s-----", type];
+	
+	[crt appendString:[dt stringByBase64Encoding]];
+	[crt appendFormat:@"-----END %s-----", type];
+	[crt makeImmutable];*/
+	OFDataArray* dt = [OFDataArray dataArrayWithItemSize:sizeof(char)];
+	[dt addItems:(const void *)pData count:(size_t)cbLength];
+	MBEDX509Certificate* crt = [MBEDX509Certificate certificateWithDERData:dt];
+
+	of_log(@"%@", crt);
+
+}
 
 @interface Test: OFObject<OFApplicationDelegate>
 {
@@ -18,6 +82,40 @@ OF_APPLICATION_DELEGATE(Test)
 
 - (void)applicationDidFinishLaunching
 {
+	HCERTSTORE hStore = CertOpenSystemStore(0, "CA");
+
+	for ( PCCERT_CONTEXT pCertCtx = CertEnumCertificatesInStore(hStore, NULL);
+
+       pCertCtx != NULL;
+
+       pCertCtx = CertEnumCertificatesInStore(hStore, pCertCtx) )
+ {
+	@autoreleasepool {
+		OutputType outputType = IsPKCS7(pCertCtx->dwCertEncodingType) ? PKCS7 : Certificate;
+
+   		DisplayPEM(outputType, pCertCtx->pbCertEncoded, pCertCtx->cbCertEncoded);
+	}
+   
+ }
+
+
+ for ( PCCRL_CONTEXT pCrlCtx = CertEnumCRLsInStore(hStore, NULL);
+
+       pCrlCtx != NULL;
+       pCrlCtx = CertEnumCRLsInStore(hStore, pCrlCtx) )
+
+ {
+	@autoreleasepool {
+		OutputType outputType = IsPKCS7(pCrlCtx->dwCertEncodingType) ? PKCS7 : X509CRL;
+
+   		DisplayPEM(outputType, pCrlCtx->pbCrlEncoded, pCrlCtx->cbCrlEncoded);
+	} 	
+   
+
+ }
+
+ CertCloseStore(hStore, 0);
+
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
 	OFDataArray* srv_crt = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
@@ -32,19 +130,25 @@ OF_APPLICATION_DELEGATE(Test)
 	srv.PK = [MBEDPKey keyWithPEM:[OFString stringWithUTF8String:[srv_key items] length:([srv_key count] * [srv_key itemSize])] password:nil isPublic:false];
 	srv.ownCertificate = [MBEDX509Certificate certificatesWithData:srv_crt];
 	srv.sslVersion = OBJMBED_SSLVERSION_TLSv1;
+	srv.requestClientCertificatesEnabled = true;
 	
 	[srv bindToHost:@"0.0.0.0" port:9999];
 	[srv listen];
 
 	[srv asyncAcceptWithBlock:^bool(OFTCPSocket *socket, OFTCPSocket *acceptedSocket, OFException *_Nullable exception){
 		if (exception) {
-			of_log(@"%@ %@ %d", exception, ((OFAcceptFailedException*)exception).socket, [((OFAcceptFailedException*)exception).socket fileDescriptorForReading]);
+			if ([exception isKindOfClass:[OFAcceptFailedException class]] || [exception isKindOfClass:[SSLAcceptFailedException class]])
+				of_log(@"%@ %@ %d", exception, ((OFAcceptFailedException*)exception).socket, [((OFAcceptFailedException*)exception).socket fileDescriptorForReading]);
+			else
+				of_log(@"%@", exception);
 			return true;
 		}
 
 		of_log(@"Connection accepted %@ %d", acceptedSocket, [acceptedSocket fileDescriptorForReading]);
 
 		MBEDSSLSocket* sclient = (MBEDSSLSocket *)acceptedSocket;
+
+		of_log(@"Client certificate:\n\n%@", sclient.peerCertificate);
 
 		[sclient asyncReadLineWithBlock:^bool(OFStream *stream, OFString *_Nullable line, OFException *_Nullable exception){
 			if (exception) {

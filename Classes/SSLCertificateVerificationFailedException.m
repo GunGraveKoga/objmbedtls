@@ -38,9 +38,9 @@
 
 - (OFString *)description
 {
-	OFMutableString* desc = [OFMutableString stringWithUTF8String:"Certificate vrification failed:\n"];
+	OFMutableString* desc = [OFMutableString stringWithUTF8String:"Certificate verification failed: "];
 
-	char buf[1024];
+	char buf[4096];
 
 	int ret = mbedtls_x509_crt_verify_info(buf, 1024, "", _verifyCodes);
 
@@ -48,6 +48,8 @@
 		[desc appendUTF8String:buf];
 	else
 		[desc appendUTF8String:"Unknown!"];
+
+	[desc appendString:@"!"];
 
 	[desc makeImmutable];
 
