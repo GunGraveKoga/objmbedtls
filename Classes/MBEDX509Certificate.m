@@ -321,7 +321,6 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	for (size_t idx = 0; idx < len; idx++) {
 		tmpRange = [name rangeOfString:@"," options:0 range:of_range(idx, len - idx)];
-		of_log(@"%zu [%C]", idx, [name characterAtIndex:idx]);
 
 		if (tmpRange.location == OF_NOT_FOUND) {
 			if (idx == 0) {
@@ -504,9 +503,13 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
             self.certificate->valid_to.day,  self.certificate->valid_to.hour,
             self.certificate->valid_to.min,  self.certificate->valid_to.sec
 		];
-
+	
 	self.issued = [OFDate dateWithLocalDateString:dtSString format:dtFormat];
-	self.expires = [OFDate dateWithLocalDateString:dtEString format:dtFormat];
+
+	if ([dtEString containsString:@"2038-"] || [dtEString containsString:@"2039-"]) //ObjFW use mktime() that does not support date > 03:14:07 19 Jan 2038
+		self.expires = [OFDate distantFuture];
+	else
+		self.expires = [OFDate dateWithLocalDateString:dtEString format:dtFormat];
 
 	self.keySize = (int)mbedtls_pk_get_bitlen( &(self.certificate->pk) );
 
@@ -758,6 +761,8 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	} else {
 		[ret appendFormat: @"%s: %d bits", key_size_str, self.keySize];
 	}
+
+	[ret appendString: @"\n\n"];
 
 	[ret appendFormat: @"Basic constraints: %@", (self.isCA ? @"Yes" : @"No")];
 	if (self.maxPathLength > 0)
