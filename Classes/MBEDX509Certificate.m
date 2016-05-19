@@ -468,8 +468,9 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	memset(buf, 0, bufSize);
 
 	ret = mbedtls_x509_dn_gets(buf, bufSize, &(self.certificate->subject));
-	if (ret > 0)
+	if (ret > 0) {
 		self.subject = [self X509_dictionaryFromX509Name:[OFString stringWithUTF8String:buf length:ret]];
+	}
 	else {
 		objc_autoreleasePoolPop(pool);
 		[self release];

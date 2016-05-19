@@ -6,6 +6,8 @@
 #import "MBEDSSL.h"
 #import "SSLAcceptFailedException.h"
 
+#import <WinBacktrace.h>
+
 typedef enum  {
   None,
   Certificate,
@@ -61,11 +63,25 @@ void DisplayPEM(OutputType outputType, BYTE const* pData, DWORD cbLength)
 	[crt appendString:[dt stringByBase64Encoding]];
 	[crt appendFormat:@"-----END %s-----", type];
 	[crt makeImmutable];*/
+	static OFMutableString* pem = nil;
+
+	if (!pem)
+		pem = [OFMutableString string];
+
+	MBEDX509Certificate* crt = nil;
+
 	OFDataArray* dt = [OFDataArray dataArrayWithItemSize:sizeof(char)];
 	[dt addItems:(const void *)pData count:(size_t)cbLength];
-	MBEDX509Certificate* crt = [MBEDX509Certificate certificateWithDERData:dt];
+	@try {
 
-	of_log(@"%@", crt);
+		crt = [MBEDX509Certificate certificateWithDERData:dt];
+
+		of_log(@"%@", crt);
+	}@catch (OFException* e) {
+		of_log(@"%@", e);
+		[e printDebugBacktrace];
+		crt = nil;
+	}
 
 }
 
@@ -82,6 +98,8 @@ OF_APPLICATION_DELEGATE(Test)
 
 - (void)applicationDidFinishLaunching
 {
+	WinBacktrace* plugin = [OFPlugin pluginFromFile:@"WinBacktrace"];
+
 	HCERTSTORE hStore = CertOpenSystemStore(0, "CA");
 
 	for ( PCCERT_CONTEXT pCertCtx = CertEnumCertificatesInStore(hStore, NULL);
