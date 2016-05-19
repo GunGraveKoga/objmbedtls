@@ -310,9 +310,70 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 - (OFDictionary *)X509_dictionaryFromX509Name:(OFString *)name
 {
 	OFMutableDictionary* dictionary = [OFMutableDictionary dictionary];
-	OFArray* names = [name componentsSeparatedByString:[OFString stringWithUTF8String:", "]];
+	
+	OFMutableArray* names = [OFMutableArray array];
 
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+	
+	size_t len = [name length];
+	OFString* field = nil;
+	of_range_t tmpRange;
+
+	for (size_t idx = 0; idx < len; idx++) {
+		tmpRange = [name rangeOfString:@"," options:0 range:of_range(idx, len - idx)];
+		of_log(@"%zu [%C]", idx, [name characterAtIndex:idx]);
+
+		if (tmpRange.location == OF_NOT_FOUND) {
+			if (idx == 0) {
+				tmpRange = [name rangeOfString:@"=" options:0 range:of_range(idx, len - idx)];
+
+				if (tmpRange.location == OF_NOT_FOUND) {
+					[pool release];
+					@throw [OFInvalidArgumentException exception];
+				}
+
+				[names addObject:[name stringByDeletingEnclosingWhitespaces]];
+			}
+
+			field = [name substringWithRange:of_range(idx, len - idx)];
+
+			[names addObject:[field stringByDeletingEnclosingWhitespaces]];
+
+			[pool releaseObjects];
+
+			break;
+		}
+
+		tmpRange = [name rangeOfString:@"=" options:0 range:of_range(tmpRange.location, len - tmpRange.location)];
+
+		if (tmpRange.location == OF_NOT_FOUND) {
+			field = [name substringWithRange:of_range(idx, len - idx)];
+
+			[names addObject:[field stringByDeletingEnclosingWhitespaces]];
+
+			[pool releaseObjects];
+
+			break;
+		}
+		
+		tmpRange = [name rangeOfString:@" " options:OF_STRING_SEARCH_BACKWARDS range:of_range(idx, tmpRange.location - idx)];
+
+		if (tmpRange.location == OF_NOT_FOUND) {
+			[pool release];
+
+			@throw [OFInvalidArgumentException exception];
+		}
+
+		field = [name substringWithRange:of_range(idx, tmpRange.location - idx)];
+
+		[names addObject:[field stringByDeletingEnclosingWhitespaces]];
+
+		[pool releaseObjects];
+
+		idx = tmpRange.location;
+	}
+
+	
 
 	for (OFString* dn in names) {
 		OFArray* pair = [dn componentsSeparatedByString:[OFString stringWithUTF8String:"="]];
