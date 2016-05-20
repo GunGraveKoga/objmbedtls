@@ -178,26 +178,30 @@ sslsocket: mbedcrypto mbedx509 mbedtls $(build_dir)/$(OBJFW_SSL_SOCKET_LIB)
 
 $(build_dir)/$(OBJFW_SSL_SOCKET_LIB): $(OBJFW_SSL_SOCKET_LIB)
 
-mbedcrypto: $(build_dir)/$(MBEDTLS_CRYPTO_SHARED) $(build_dir)/$(MBEDTLS_CRYPTO_STATIC)
+mbedcrypto: $(build_dir)/$(MBEDTLS_CRYPTO_SHARED) 
+#$(build_dir)/$(MBEDTLS_CRYPTO_STATIC)
 
 $(build_dir)/$(MBEDTLS_CRYPTO_SHARED): $(MBEDTLS_CRYPTO_SHARED)
 
-$(build_dir)/$(MBEDTLS_CRYPTO_STATIC): $(MBEDTLS_CRYPTO_STATIC)
+#$(build_dir)/$(MBEDTLS_CRYPTO_STATIC): $(MBEDTLS_CRYPTO_STATIC)
 
-mbedx509: mbedcrypto $(build_dir)/$(MBEDTLS_X509_SHARED) $(build_dir)/$(MBEDTLS_X509_STATIC)
+mbedx509: mbedcrypto $(build_dir)/$(MBEDTLS_X509_SHARED) 
+#$(build_dir)/$(MBEDTLS_X509_STATIC)
 
 $(build_dir)/$(MBEDTLS_X509_SHARED): $(MBEDTLS_X509_SHARED)
 
-$(build_dir)/$(MBEDTLS_X509_STATIC): $(MBEDTLS_X509_STATIC)
+#$(build_dir)/$(MBEDTLS_X509_STATIC): $(MBEDTLS_X509_STATIC)
 
-mbedtls: mbedx509 mbedcrypto $(build_dir)/$(MBEDTLS_TLS_SHARED) $(build_dir)/$(MBEDTLS_TLS_STATIC)
+mbedtls: mbedx509 mbedcrypto $(build_dir)/$(MBEDTLS_TLS_SHARED) 
+#$(build_dir)/$(MBEDTLS_TLS_STATIC)
 
 $(build_dir)/$(MBEDTLS_TLS_SHARED): $(MBEDTLS_TLS_SHARED)
 
-$(build_dir)/$(MBEDTLS_TLS_STATIC): $(MBEDTLS_TLS_STATIC)
+#$(build_dir)/$(MBEDTLS_TLS_STATIC): $(MBEDTLS_TLS_STATIC)
 
+$(MBEDTLS_CRYPTO_SHARED): $(OBJS_CRYPTO_LIST)
 
-$(MBEDTLS_CRYPTO_SHARED): $(SOURCES_CRYPTO_LIST)
+$(OBJS_CRYPTO_LIST): $(SOURCES_CRYPTO_LIST)
 	echo -e "\e[1;34mBuilding $(MBEDTLS_CRYPTO_SHARED)...\e[0m"
 	$(CHDIR) $(mbedtls_source_dir) && \
 	$(CC) --builddir $(build_dir) $(SOURCES_CRYPTO) -I$(MBEDTLS_INCLUDES_DIR) --lib 0.9 -o $(MBEDTLS_CRYPTO) -lwinmm -lgdi32 && \
@@ -205,14 +209,16 @@ $(MBEDTLS_CRYPTO_SHARED): $(SOURCES_CRYPTO_LIST)
 	$(MOVE) $(MBEDTLS_CRYPTO_SHARED_EXPORT) $(build_dir)
 	echo -e "\e[1;34mDone.\e[0m"
 
-$(MBEDTLS_CRYPTO_STATIC): $(MBEDTLS_CRYPTO_SHARED) $(OBJS_CRYPTO_LIST)
-	echo -e "\e[1;34mBuilding $(MBEDTLS_CRYPTO_STATIC)...\e[0m"
-	$(CHDIR) $(build_dir) && \
-	$(AR) rc $(MBEDTLS_CRYPTO_STATIC) $(OBJS_CRYPTO) && \
-	$(AR) s $(MBEDTLS_CRYPTO_STATIC)
-	echo -e "\e[1;34mDone.\e[0m"
+#$(MBEDTLS_CRYPTO_STATIC): $(MBEDTLS_CRYPTO_SHARED) $(OBJS_CRYPTO_LIST)
+	#echo -e "\e[1;34mBuilding $(MBEDTLS_CRYPTO_STATIC)...\e[0m"
+	#$(CHDIR) $(build_dir) && \
+	#$(AR) rc $(MBEDTLS_CRYPTO_STATIC) $(OBJS_CRYPTO) && \
+	#$(AR) s $(MBEDTLS_CRYPTO_STATIC)
+	#echo -e "\e[1;34mDone.\e[0m"
 
-$(MBEDTLS_X509_SHARED): $(SOURCES_X509_LIST)
+$(MBEDTLS_X509_SHARED): $(OBJS_X509_LIST)
+
+$(OBJS_X509_LIST): $(SOURCES_X509_LIST)
 	echo -e "\e[1;34mBuilding $(MBEDTLS_X509_SHARED)...\e[0m"
 	$(CHDIR) $(mbedtls_source_dir) && \
 	$(CC) --builddir $(build_dir) $(SOURCES_X509) -I$(MBEDTLS_INCLUDES_DIR) --lib 0.9 -o $(MBEDTLS_X509) -lwinmm -lgdi32 -L$(build_dir) -l$(MBEDTLS_CRYPTO) && \
@@ -220,14 +226,16 @@ $(MBEDTLS_X509_SHARED): $(SOURCES_X509_LIST)
 	$(MOVE) $(MBEDTLS_X509_SHARED_EXPORT) $(build_dir)
 	echo -e "\e[1;34mDone.\e[0m"
 
-$(MBEDTLS_X509_STATIC): $(MBEDTLS_X509_SHARED) $(OBJS_X509_LIST)
-	echo -e "\e[1;34mBuilding $(MBEDTLS_X509_STATIC)...\e[0m"
-	$(CHDIR) $(build_dir) && \
-	$(AR) rc $(MBEDTLS_X509_STATIC) $(OBJS_X509) && \
-	$(AR) s $(MBEDTLS_X509_STATIC)
-	echo -e "\e[1;34mDone.\e[0m"
+#$(MBEDTLS_X509_STATIC): $(MBEDTLS_X509_SHARED) $(OBJS_X509_LIST)
+	#echo -e "\e[1;34mBuilding $(MBEDTLS_X509_STATIC)...\e[0m"
+	#$(CHDIR) $(build_dir) && \
+	#$(AR) rc $(MBEDTLS_X509_STATIC) $(OBJS_X509) && \
+	#$(AR) s $(MBEDTLS_X509_STATIC)
+	#echo -e "\e[1;34mDone.\e[0m"
 
-$(MBEDTLS_TLS_SHARED): $(SOURCES_TLS_LIST)
+$(MBEDTLS_TLS_SHARED): $(OBJS_TLS_LIST)
+
+$(OBJS_TLS_LIST): $(SOURCES_TLS_LIST)
 	echo -e "\e[1;34mBuilding $(MBEDTLS_TLS_SHARED)...\e[0m"
 	$(CHDIR) $(mbedtls_source_dir) && \
 	$(CC) --builddir $(build_dir) $(SOURCES_TLS) -I$(MBEDTLS_INCLUDES_DIR) --lib 0.9 -o $(MBEDTLS_TLS) -lwinmm -lgdi32 -L$(build_dir) -l$(MBEDTLS_CRYPTO) -l$(MBEDTLS_X509) && \
@@ -235,25 +243,25 @@ $(MBEDTLS_TLS_SHARED): $(SOURCES_TLS_LIST)
 	$(MOVE) $(MBEDTLS_TLS_SHARED_EXPORT) $(build_dir)
 	echo -e "\e[1;34mDone.\e[0m"
 
-$(MBEDTLS_TLS_STATIC): $(MBEDTLS_TLS_SHARED) $(OBJS_TLS_LIST)
-	echo -e "\e[1;34mBuilding $(MBEDTLS_TLS_STATIC)...\e[0m"
-	$(CHDIR) $(build_dir) && \
-	$(AR) rc $(MBEDTLS_TLS_STATIC) $(OBJS_CRYPTO) && \
-	$(AR) s $(MBEDTLS_TLS_STATIC)
-	echo -e "\e[1;34mDone.\e[0m"
+#$(MBEDTLS_TLS_STATIC): $(MBEDTLS_TLS_SHARED) $(OBJS_TLS_LIST)
+	#echo -e "\e[1;34mBuilding $(MBEDTLS_TLS_STATIC)...\e[0m"
+	#$(CHDIR) $(build_dir) && \
+	#$(AR) rc $(MBEDTLS_TLS_STATIC) $(OBJS_CRYPTO) && \
+	#$(AR) s $(MBEDTLS_TLS_STATIC)
+	#echo -e "\e[1;34mDone.\e[0m"
 
-$(OBJFW_SSL_SOCKET_LIB): $(MBEDTLS_CRYPTO_SHARED) $(MBEDTLS_X509_SHARED) $(MBEDTLS_TLS_SHARED) $(MBEDTLS_CRYPTO_STATIC) $(MBEDTLS_X509_STATIC) $(MBEDTLS_TLS_STATIC) $(SOURCES_OBJFW_SSL_SOCKET_LIST)
+$(OBJFW_SSL_SOCKET_LIB): $(MBEDTLS_CRYPTO_SHARED) $(MBEDTLS_X509_SHARED) $(MBEDTLS_TLS_SHARED) $(SOURCES_OBJFW_SSL_SOCKET_LIST)
 	echo -e "\e[1;34mBuilding $(OBJFW_SSL_SOCKET_LIB)...\e[0m"
 	$(CHDIR) $(objmbedtls_source_dir) && \
-	$(COPY) $(build_dir)/$(MBEDTLS_TLS_STATIC) $(objmbedtls_source_dir) && \
-	$(COPY) $(build_dir)/$(MBEDTLS_X509_STATIC) $(objmbedtls_source_dir) && \
-	$(COPY) $(build_dir)/$(MBEDTLS_CRYPTO_STATIC) $(objmbedtls_source_dir) && \
+	#$(COPY) $(build_dir)/$(MBEDTLS_TLS_STATIC) $(objmbedtls_source_dir) && \
+	#$(COPY) $(build_dir)/$(MBEDTLS_X509_STATIC) $(objmbedtls_source_dir) && \
+	#$(COPY) $(build_dir)/$(MBEDTLS_CRYPTO_STATIC) $(objmbedtls_source_dir) && \
 	$(CC) --builddir $(build_dir) $(SOURCES_OBJFW_SSL_SOCKET) -I$(MBEDTLS_INCLUDES_DIR) -I$(objmbedtls_source_dir) --lib 0.9 -o $(OBJFW_SSL_SOCKET) -L$(build_dir) -l$(MBEDTLS_CRYPTO) -l$(MBEDTLS_X509) -l$(MBEDTLS_TLS) && \
 	$(MOVE) $(OBJFW_SSL_SOCKET_LIB) $(build_dir) && \
-	$(MOVE) $(OBJFW_SSL_SOCKET_LIB_EXPORT) $(build_dir) && \
-	$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_TLS_STATIC) && \
-	$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_X509_STATIC) && \
-	$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_CRYPTO_STATIC)
+	$(MOVE) $(OBJFW_SSL_SOCKET_LIB_EXPORT) $(build_dir)
+	#$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_TLS_STATIC) && \
+	#$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_X509_STATIC) && \
+	#$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_CRYPTO_STATIC)
 	echo -e "\e[1;34mDone.\e[0m"
 
 clean:
