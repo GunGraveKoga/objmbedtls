@@ -365,7 +365,12 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 		field = [name substringWithRange:of_range(idx, tmpRange.location - idx)];
 
-		[names addObject:[field stringByDeletingEnclosingWhitespaces]];
+		field = [field stringByDeletingEnclosingWhitespaces];
+
+		if ([field hasSuffix:@","])
+			field = [field stringByReplacingOccurrencesOfString:@"," withString:@"" options:OF_STRING_SEARCH_BACKWARDS range:of_range(0, [field length])];
+
+		[names addObject:field];
 
 		[pool releaseObjects];
 
@@ -436,6 +441,30 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 }
 
+static inline OFString* parse_dn_string(char* buffer, size_t size) {
+
+	OFMutableString* dnString = [OFMutableString string];
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	for (size_t idx = 0; idx < size; idx++) {
+		unsigned char ch = (unsigned char)buffer[idx];
+
+		if (ch > 0 && ch < 127)
+			[dnString appendFormat:@"%c", ch];
+		else
+			[dnString appendFormat:@"\\x%x", ch];
+
+		[pool releaseObjects];
+	}
+
+	[pool release];
+
+	[dnString makeImmutable];
+
+	return dnString;
+}
+
 - (void)X509_fillProperties
 {
 	void* pool = objc_autoreleasePoolPush();
@@ -456,9 +485,23 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	memset(buf, 0, bufSize);
 
+	OFString* dnString = nil;
+
 	ret = mbedtls_x509_dn_gets(buf, bufSize, &(self.certificate->issuer));
-	if (ret > 0)
+	if (ret > 0) {
+
+		@try {
+			dnString = [OFString stringWithUTF8String:buf length:ret];
+		}@catch(id e) {
+			dnString = nil;
+		}
+
+		if (nil == dnString) {
+			dnString = parse_dn_string(buf, (size_t)ret);	
+		}
+
 		self.issuer = [self X509_dictionaryFromX509Name:[OFString stringWithUTF8String:buf length:ret]];
+	}
 	else {
 		objc_autoreleasePoolPop(pool);
 		[self release];
@@ -469,7 +512,18 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	ret = mbedtls_x509_dn_gets(buf, bufSize, &(self.certificate->subject));
 	if (ret > 0) {
-		self.subject = [self X509_dictionaryFromX509Name:[OFString stringWithUTF8String:buf length:ret]];
+
+		@try {
+			dnString = [OFString stringWithUTF8String:buf length:ret];
+		}@catch(id e) {
+			dnString = nil;
+		}
+
+		if (nil == dnString) {
+			dnString = parse_dn_string(buf, (size_t)ret);	
+		}
+
+		self.subject = [self X509_dictionaryFromX509Name:dnString];
 	}
 	else {
 		objc_autoreleasePoolPop(pool);
