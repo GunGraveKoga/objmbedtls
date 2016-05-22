@@ -22,6 +22,13 @@
 	return self;
 }
 
+- (void)dealloc
+{
+	[_sourceObject release];
+
+	[super dealloc];
+}
+
 - (instancetype)initWithObject:(id)object errorNumber:(int)errNo
 {
 	self = [super init];
@@ -37,14 +44,19 @@
 	return [[[self alloc] initWithObject:object errorNumber:errNo] autorelease];
 }
 
-- (OFString *)description
+- (OFString *)errorDescription
 {
-
 	char buffer[4096] = {0};
 
 	mbedtls_strerror( _errNo, buffer, sizeof(buffer) );
 
-	return [OFString stringWithFormat:@"An exception occurred in object %@: %s", self.sourceObject, buffer];
+	return [OFString stringWithUTF8String:buffer];
+}
+
+- (OFString *)description
+{
+
+	return [OFString stringWithFormat:@"An exception occurred in object %@: %@", self.sourceObject, [self errorDescription]];
 }
 
 @end

@@ -16,6 +16,8 @@
 #define PRV_DER_MAX_BYTES   RSA_PRV_DER_MAX_BYTES > ECP_PRV_DER_MAX_BYTES ? \
                             RSA_PRV_DER_MAX_BYTES : ECP_PRV_DER_MAX_BYTES
 
+#define BASE64_SIZE_FOR(x) 4 * (x / 3);                        
+
 #ifdef __cplusplus
 #define OBJMBEDTLS_EXPORT extern "C"
 #else

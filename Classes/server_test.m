@@ -76,7 +76,16 @@ void DisplayPEM(OutputType outputType, BYTE const* pData, DWORD cbLength)
 
 		crt = [MBEDX509Certificate certificateWithDERData:dt];
 
+		of_log(@"DateS %@", [crt.issued localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]);
+		@try {
+			of_log(@"DateE %@", [crt.expires localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]);
+		}@catch(id e) {
+			of_log(@"%04d %02d %02d", [crt.expires localYear], [crt.expires localDayOfMonth], [crt.expires localMonthOfYear]);
+		}
+		of_log(@"%@", [OFDate distantFuture]);
+
 		of_log(@"%@", crt);
+		of_log(@"%@", [crt PEM]);
 	}@catch (OFException* e) {
 		of_log(@"%@", e);
 		[e printDebugBacktrace];

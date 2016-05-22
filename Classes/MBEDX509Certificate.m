@@ -1,10 +1,15 @@
 #import <ObjFW/ObjFW.h>
+#import "macros.h"
 #import "MBEDX509Certificate.h"
 #import "MBEDPKey.h"
-#import "macros.h"
+#import "MBEDCRL.h"
+#import "MBEDTLSException.h"
+#import "MBEDInitializationFailedException.h"
 
 #include <mbedtls/oid.h>
 #include <mbedtls/pk.h>
+#include <mbedtls/pem.h>
+#include <mbedtls/base64.h>
 
 
 @interface MBEDX509Certificate()
@@ -297,9 +302,11 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 		@throw [OFInvalidArgumentException exception];
 	}
 
-	if ((mbedtls_x509_crt_parse_der(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
+	int ret = 0;
+
+	if ((ret = mbedtls_x509_crt_parse_der(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
 	}
 
 	[self X509_fillProperties];
@@ -561,10 +568,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	
 	self.issued = [OFDate dateWithLocalDateString:dtSString format:dtFormat];
 
-	if ([dtEString containsString:@"2038-"] || [dtEString containsString:@"2039-"]) //ObjFW use mktime() that does not support date > 03:14:07 19 Jan 2038
-		self.expires = [OFDate distantFuture];
-	else
-		self.expires = [OFDate dateWithLocalDateString:dtEString format:dtFormat];
+	self.expires = [OFDate dateWithLocalDateString:dtEString format:dtFormat];
 
 	self.keySize = (int)mbedtls_pk_get_bitlen( &(self.certificate->pk) );
 
@@ -712,6 +716,54 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		return [MBEDX509Certificate certificateWithX509Struct:self.certificate->next];
 
 	return nil;
+}
+
+- (bool)isRevoked:(MBEDCRL*)crl
+{
+	return (bool)mbedtls_x509_crt_is_revoked(self.certificate, crl.context);
+}
+
+- (OFDataArray *)DER
+{
+	OFDataArray* der = [OFDataArray dataArrayWithItemSize:sizeof(char)];
+
+	[der addItems:self.certificate->raw.p count:self.certificate->raw.len];
+
+	return der;
+}
+
+- (OFString *)PEM
+{
+	return [self PEMwithHeader:@"-----BEGIN CERTIFICATE-----\n" bottom:@"-----END CERTIFICATE-----\n"];
+}
+
+- (OFString *)PEMwithHeader:(OFString *)header bottom:(OFString *)bottom
+{
+	int ret = 0;
+	size_t bufLen = 0;
+
+	size_t olen = 0;
+
+	unsigned char* buffer = NULL;
+
+	mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.certificate->raw.p, self.certificate->raw.len, NULL, 0, &bufLen);
+
+	buffer = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * (bufLen + 1));
+
+	if (buffer == NULL)
+		@throw [OFOutOfMemoryException exceptionWithRequestedSize:bufLen];
+
+	if ((ret = mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.certificate->raw.p, self.certificate->raw.len, buffer, bufLen + 1, &olen)) != 0) {
+
+		if (ret == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+			of_log(@"%zu %zu", bufLen, olen);
+		}
+
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+	}
+		
+
+	return [OFString stringWithUTF8String:(const char *)buffer length:olen];
 }
 
 - (mbedtls_x509_crt *)certificate

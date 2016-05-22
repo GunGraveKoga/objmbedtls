@@ -56,7 +56,8 @@ SOURCES_TLS_LIST := $(addprefix $(mbedtls_source_dir)/,$(SOURCES_TLS))
 SOURCES_OBJFW_SSL_SOCKET= MBEDX509Certificate.m MBEDSSL.m MBEDCRL.m 	\
 						MBEDPKey.m MBEDSSLSocket.m SSLAcceptFailedException.m 	\
 						SSLCertificateVerificationFailedException.m SSLCertificationAuthorityMissingException.m SSLConnectionFailedException.m 	\
-						SSLReadFailedException.m SSLWriteFailedException.m MBEDTLSException.m
+						SSLReadFailedException.m SSLWriteFailedException.m MBEDTLSException.m \
+						MBEDInitializationFailedException.m
 
 SOURCES_OBJFW_SSL_SOCKET_LIST := $(addprefix $(objmbedtls_source_dir)/,$(SOURCES_OBJFW_SSL_SOCKET))					
 

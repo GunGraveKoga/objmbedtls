@@ -14,5 +14,6 @@
 
 - (instancetype)initWithObject:(id)object errorNumber:(int)errNo;
 + (instancetype)exceptionWithObject:(id)object errorNumber:(int)errNo;
+- (OFString *)errorDescription;
 
 @end
