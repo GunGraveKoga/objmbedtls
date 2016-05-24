@@ -63,6 +63,29 @@ OF_APPLICATION_DELEGATE(Test)
 
  	MBEDCRL* crl = [MBEDCRL crlWithPEMString:crlpem];
 
+ 	of_log(@"%@", crl);
+
+ 	//MBEDX509Certificate* cert = [MBEDX509Certificate certificateWithFile:@"./test.pem"];
+ 	//of_log(@"%@", cert);
+ 	OFString* certpem = [OFString stringWithContentsOfFile:@"./certificate.pem"];
+ 	OFDataArray* dt = [OFDataArray dataArrayWithContentsOfFile:@"./certificate.pem"];
+
+ 	MBEDX509Certificate* cert = [MBEDX509Certificate certificateWithPEMorDERData:dt];
+ 	of_log(@"Data %@", cert);
+ 	cert = [MBEDX509Certificate certificateWithPEMString:certpem];
+ 	of_log(@"String %@", cert);
+ 	cert = [MBEDX509Certificate certificateWithFile:@"./test.pem"];
+ 	of_log(@"File %@", cert);
+
+ 	crl = [MBEDCRL crlWithFile:@"./crl.pem"];
+ 	of_log(@"File %@", crl);
+ 	crlpem = [OFString stringWithContentsOfFile:@"./crl.pem"];
+ 	crl = [MBEDCRL crlWithPEMString:crlpem];
+ 	of_log(@"String %@", crl);
+ 	dt = [OFDataArray dataArrayWithContentsOfFile:@"./crl.pem"];
+ 	crl = [MBEDCRL crlWithPEMorDERData:dt];
+ 	of_log(@"Data %@", crl);
+
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
 	OFString* srv_crt = [OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len];

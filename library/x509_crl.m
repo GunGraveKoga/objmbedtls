@@ -496,8 +496,9 @@ int mbedtls_x509_crl_parse( mbedtls_x509_crl *chain, const unsigned char *buf, s
     int is_pem = 0;
 
     if( chain == NULL || buf == NULL )
-        return( MBEDTLS_ERR_X509_BAD_INPUT_DATA );
+        return( MBEDTLS_ERR_X509_BAD_INPUT_DATA ); 
 
+          
     do
     {
         mbedtls_pem_init( &pem );

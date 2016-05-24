@@ -3,6 +3,9 @@
 #import "MBEDTLSException.h"
 #import "MBEDInitializationFailedException.h"
 
+#include <mbedtls/pem.h>
+#include <mbedtls/base64.h>
+
 OFString *const kRCSerialNumber = @"kRCSerialNumber";
 OFString *const kRCRevocationDate = @"kRCRevocationDate";
 
@@ -118,12 +121,17 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 {
 	self = [self init];
 
-	int ret = 0;
+	@try {
+		[self parsePEM:string];
 
-	if ((ret = mbedtls_x509_crl_parse(self.context, (const unsigned char *)[string UTF8String], [string UTF8StringLength])) != 0) {
+	}@catch(id e) {
 		[self release];
 
-		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:ret];
+		if ([e isKindOfClass:[MBEDTLSException class]]) {
+			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:((MBEDTLSException*)e).errNo];
+		}
+
+		@throw e;
 	}
 
 	[self CRL_fillProperties];
@@ -136,6 +144,11 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 	self = [self init];
 
 	int ret = 0;
+
+	if (strstr( (const char *)[data items], "-----BEGIN X509 CRL-----" ) != NULL) {
+		if (*((char *)[data lastItem]) != '\0')
+			[data addItems:"" count:1];
+	}
 
 	if ((ret = mbedtls_x509_crl_parse(self.context, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
 		[self release];
@@ -168,7 +181,7 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 		@throw [OFInvalidArgumentException exception];
 	}
 
-	if (*((char *)[data lastItem]) == '\0' && strstr( (const char *)[data items], "-----BEGIN X509 CRL-----" ) != NULL) {
+	if (strstr( (const char *)[data items], "-----BEGIN X509 CRL-----" ) != NULL) {
 		@try {
 			[self parsePEM:[OFString stringWithUTF8String:(const char *)[data items] length:(size_t)[data count]]];
 
@@ -521,9 +534,23 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 {
 	int ret = 0;
 
-	if ((ret = mbedtls_x509_crl_parse(self.context, (const unsigned char *)[pem UTF8String], [pem UTF8StringLength])) != 0)
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+	size_t buflen = [pem UTF8StringLength];
 
+	if (((unsigned char *)[pem UTF8String])[buflen - 1] != '\0')
+		buflen += 1;
+
+	unsigned char* buf = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * buflen);
+
+	if (buf == NULL)
+		@throw [OFOutOfMemoryException exceptionWithRequestedSize:buflen];
+
+	memset(buf, 0, buflen);
+	memcpy(buf, [pem UTF8String], [pem UTF8StringLength]);
+
+	buf[buflen-1] = '\0';
+
+	if ((ret = mbedtls_x509_crl_parse(self.context, buf, buflen)) != 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 }
 
 - (MBEDCRL *)next
@@ -556,31 +583,43 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 - (OFString *)PEM
 {
-	return [self PEMWithHeader:@"-----BEGIN X509 CRL-----" bottom:@"-----END X509 CRL-----"];
+	return [self PEMWithHeader:@"-----BEGIN X509 CRL-----\n" bottom:@"-----END X509 CRL-----\n"];
 }
 
 - (OFString *)PEMWithHeader:(OFString *)header bottom:(OFString *)bottom
 {
-	OFMutableString* pem = [OFMutableString string];
+	int ret = 0;
+	size_t bufLen = 0;
 
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+	size_t olen = 0;
 
-	OFDataArray* der = [self DER];
+	unsigned char* buffer = NULL;
 
-	[pem appendFormat:@"%@\r\n%@\r\n%@\r\n", header, [der stringByBase64Encoding], bottom];
+	mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.context->raw.p, self.context->raw.len, NULL, 0, &bufLen);
 
-	[pool release];
+	buffer = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * (bufLen + 1));
 
-	[pem makeImmutable];
+	if (buffer == NULL)
+		@throw [OFOutOfMemoryException exceptionWithRequestedSize:bufLen];
 
-	return pem;
+	if ((ret = mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.context->raw.p, self.context->raw.len, buffer, bufLen + 1, &olen)) != 0) {
+
+		if (ret == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
+			of_log(@"%zu %zu", bufLen, olen);
+		}
+
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+	}
+		
+
+	return [OFString stringWithUTF8String:(const char *)buffer length:olen];
 
 }
 
 - (OFString *)description
 {
 	OFMutableString* desc = [OFMutableString string];
-
+	[desc appendUTF8String:"x509 CRL\n"];
 	[desc appendFormat:@"Version: v%d\n\n", self.version];
 
 	[desc appendFormat:@"ThisUpdate: %@\n\n", self.thisUpdate];

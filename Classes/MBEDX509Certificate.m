@@ -293,15 +293,18 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 		@throw [OFInvalidArgumentException exception];
 	}
 
-	int ret = 0;
+	@try {
+		[self parsePEM:string];
 
-	if ((ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[string UTF8String], [string UTF8StringLength])) < 0) {
+	}@catch(id e) {
 		[self release];
-		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
-	}
 
-	if (ret > 0)
-		of_log(@"%d certificates was parsed!", ret);
+		if ([e isKindOfClass:[MBEDTLSException class]]) {
+			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
+		}
+
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
 
 	[self X509_fillProperties];
 
@@ -317,6 +320,11 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	}
 
 	int ret = 0;
+
+	if (strstr( (const char *)[data items], "-----BEGIN CERTIFICATE-----" ) != NULL) {
+		if (*((char *)[data lastItem]) != '\0')
+			[data addItems:"" count:1];
+	}
 
 	if ((ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
 		[self release];
@@ -656,7 +664,8 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		@throw [OFInvalidArgumentException exception];
 	}
 
-	if (*((char *)[data lastItem]) == '\0' && strstr( (const char *)[data items], "-----BEGIN CERTIFICATE-----" ) != NULL) {
+	if (strstr( (const char *)[data items], "-----BEGIN CERTIFICATE-----" ) != NULL) {
+		
 		@try {
 			[self parsePEM:[OFString stringWithUTF8String:(const char *)[data items] length:(size_t)[data count]]];
 
@@ -670,7 +679,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 		return;
 	}
-
+	
 	@try {
 		[self parseDER:data];
 
@@ -943,7 +952,21 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 {
 	int ret = 0;
 
-	ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[pem UTF8String], [pem UTF8StringLength]);
+	size_t buflen = [pem UTF8StringLength];
+
+	if (((unsigned char *)[pem UTF8String])[buflen - 1] != '\0')
+		buflen += 1;
+
+	unsigned char* buf = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * buflen);
+
+	if (buf == NULL)
+		@throw [OFOutOfMemoryException exceptionWithRequestedSize:buflen];
+
+	memset(buf, 0, buflen);
+	memcpy(buf, [pem UTF8String], [pem UTF8StringLength]);
+	buf[buflen-1] = '\0';
+
+	ret = mbedtls_x509_crt_parse(self.certificate, buf, buflen);
 
 	if (ret < 0)
 		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
@@ -955,7 +978,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 - (OFString*)description
 {
 	OFMutableString *ret = [OFMutableString string];
-
+	[ret appendUTF8String:"X509 CRT\n"];
 	[ret appendFormat: @"Version: v%d\n\n", self.version];
 	if (self.type != nil)
 		[ret appendFormat: @"Type: %@\n\n", self.type];
