@@ -11,7 +11,6 @@
 #include <mbedtls/pem.h>
 #include <mbedtls/base64.h>
 
-
 @interface MBEDX509Certificate()
 
 @property(copy, readwrite)OFDictionary* issuer;
@@ -180,14 +179,14 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	return [[[self alloc] initWithX509Struct:crt] autorelease];
 }
 
-+ (instancetype)certificatesWithData:(OFDataArray *)data
++ (instancetype)certificateWithPEMString:(OFString *)string
 {
-	return [[[self alloc] initWithCertificatesData:data] autorelease];
+	return [[[self alloc] initWithCertificatePEMString:string] autorelease];
 }
 
-+ (instancetype)certificateWithDERData:(OFDataArray *)data
++ (instancetype)certificateWithPEMorDERData:(OFDataArray *)data
 {
-	return [[[self alloc] initWithCertificateDERData:data] autorelease];
+	return [[[self alloc] initWithCertificatePEMorDERData:data] autorelease];
 }
 
 - (instancetype)init
@@ -228,10 +227,17 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	@try {
 		[self parseFile:file];
-	}@catch(OFException* e) {
+	}@catch(id e) {
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+
+		if ([e isKindOfClass:[MBEDTLSException class]]) {
+			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
+		}
+
+		@throw e;
 	}
+
+	[self X509_fillProperties];
 
 	return self;
 }
@@ -241,10 +247,18 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	self = [self init];
 	@try {
 		[self parseFilesAtPath:path];
-	}@catch(OFException* e) {
+	}@catch(id e) {
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+
+		if ([e isKindOfClass:[MBEDTLSException class]]) {
+			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
+		}
+
+		@throw e;
 	}
+
+	[self X509_fillProperties];
+
 	return self;
 }
 
@@ -258,11 +272,11 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 		@throw [OFInvalidArgumentException exception];
 	}
 
-	//memcpy(self.certificate, crt, sizeof(mbedtls_x509_crt));
+	int ret = 0;
 
-	if ((mbedtls_x509_crt_parse_der(self.certificate, crt->raw.p, crt->raw.len)) != 0) {
+	if ((ret = mbedtls_x509_crt_parse_der(self.certificate, crt->raw.p, crt->raw.len)) != 0) {
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
 	}
 
 	[self X509_fillProperties];
@@ -270,20 +284,20 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	return self;
 }
 
-- (instancetype)initWithCertificatesData:(OFDataArray *)data
+- (instancetype)initWithCertificatePEMString:(OFString *)string
 {
 	self = [self init];
 
-	if ([data count] <= 0) {
+	if ([string UTF8StringLength] <= 0) {
 		[self release];
 		@throw [OFInvalidArgumentException exception];
 	}
 
 	int ret = 0;
 
-	if ((ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) < 0) {
+	if ((ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[string UTF8String], [string UTF8StringLength])) < 0) {
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
 	}
 
 	if (ret > 0)
@@ -293,7 +307,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	return self;
 }
-- (instancetype)initWithCertificateDERData:(OFDataArray *)data
+- (instancetype)initWithCertificatePEMorDERData:(OFDataArray *)data
 {
 	self = [self init];
 
@@ -304,7 +318,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	int ret = 0;
 
-	if ((ret = mbedtls_x509_crt_parse_der(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
+	if ((ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
 		[self release];
 		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
 	}
@@ -507,7 +521,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 			dnString = parse_dn_string(buf, (size_t)ret);	
 		}
 
-		self.issuer = [self X509_dictionaryFromX509Name:[OFString stringWithUTF8String:buf length:ret]];
+		self.issuer = [self X509_dictionaryFromX509Name:dnString];
 	}
 	else {
 		objc_autoreleasePoolPop(pool);
@@ -565,7 +579,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
             self.certificate->valid_to.day,  self.certificate->valid_to.hour,
             self.certificate->valid_to.min,  self.certificate->valid_to.sec
 		];
-	
+
 	self.issued = [OFDate dateWithLocalDateString:dtSString format:dtFormat];
 
 	self.expires = [OFDate dateWithLocalDateString:dtEString format:dtFormat];
@@ -594,19 +608,82 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 - (void)parseFilesAtPath:(OFString *)path
 {
-	if ( (mbedtls_x509_crt_parse_path(self.certificate, [path UTF8String])) != 0) {
-		@throw [OFInvalidArgumentException exception];
+	OFFileManager* filemanager = [OFFileManager defaultManager];
+
+	if ([filemanager directoryExistsAtPath:path]) {
+
+		OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+		size_t count = 0;
+		for (OFString* subPath in [filemanager contentsOfDirectoryAtPath:path]) {
+
+			if ([filemanager fileExistsAtPath:subPath]) {
+
+				@try {
+					[self parseFile:subPath];
+
+					count++;
+
+				} @catch(id e) {}
+			}
+
+			[pool releaseObjects];
+
+			continue;
+		}
+
+		[pool release];
+
+		if (count <= 0) {
+
+			@throw [OFInvalidArgumentException exception];
+		}
+
+		return;
 	}
-	[self X509_fillProperties];
+
+	@throw [OFInvalidArgumentException exception];
 }
 
 - (void)parseFile:(OFString *)file
 {
-	if ( (mbedtls_x509_crt_parse_file(self.certificate, [file UTF8String])) != 0) {
-		[self release];
-		@throw [OFInvalidArgumentException exception];;
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	OFDataArray* data = [OFDataArray dataArrayWithContentsOfFile:file];
+	
+	if ([data count] == 0 || [data lastItem] == NULL) {
+		[pool release];
+		@throw [OFInvalidArgumentException exception];
 	}
-	[self X509_fillProperties];
+
+	if (*((char *)[data lastItem]) == '\0' && strstr( (const char *)[data items], "-----BEGIN CERTIFICATE-----" ) != NULL) {
+		@try {
+			[self parsePEM:[OFString stringWithUTF8String:(const char *)[data items] length:(size_t)[data count]]];
+
+		}@catch(id e) {
+			[pool release];
+
+			@throw e;
+		}
+
+		[pool release];
+
+		return;
+	}
+
+	@try {
+		[self parseDER:data];
+
+	} @catch(id e) {
+		[pool release];
+
+		@throw e;
+	}
+
+	[pool release];
+
+	return;
+
 }
 
 - (bool)hasCommonNameMatchingDomain: (OFString*)domain
@@ -712,8 +789,22 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 - (MBEDX509Certificate *)next
 {
-	if (self.certificate->next != NULL)
-		return [MBEDX509Certificate certificateWithX509Struct:self.certificate->next];
+	static mbedtls_x509_crt *crt = NULL; 
+	static mbedtls_x509_crt *prev = NULL;
+
+	if (crt == NULL)
+		crt = self.certificate;
+
+	while( crt->version != 0 && crt->next != NULL )
+    {
+        prev = crt;
+        crt = crt->next;
+
+        return [MBEDX509Certificate certificateWithX509Struct:crt];
+    }
+
+    crt = NULL;
+    prev = NULL;
 
 	return nil;
 }
@@ -778,6 +869,87 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	}
 
 	return _PK;
+}
+
+#if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
+- (instancetype)initWithSystemCA
+{
+	self = [self init];
+	
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+#if defined(OF_WINDOWS)
+
+	HCERTSTORE hStore = CertOpenSystemStore(0, "CA");
+	OFDataArray* DER = nil;
+
+	for ( PCCERT_CONTEXT pCertCtx = CertEnumCertificatesInStore(hStore, NULL);
+
+       pCertCtx != NULL;
+
+       pCertCtx = CertEnumCertificatesInStore(hStore, pCertCtx) )
+ 	{
+		bool isPKCS7 = (bool)((pCertCtx->dwCertEncodingType & PKCS_7_ASN_ENCODING) == PKCS_7_ASN_ENCODING);
+		bool isCertificate = (bool)((pCertCtx->dwCertEncodingType & X509_ASN_ENCODING) == X509_ASN_ENCODING);
+
+		if (isPKCS7 || isCertificate ) {
+			
+			DER = [OFDataArray dataArrayWithItemSize:sizeof(char)];
+
+			[DER addItems:(const void *)pCertCtx->pbCertEncoded count:(size_t)pCertCtx->cbCertEncoded];
+
+			@try {
+				[self parseDER:DER];
+			} @catch(id e) {}
+
+			[pool releaseObjects];
+
+			DER = nil;
+
+		}
+   
+ 	}
+
+ 	CertCloseStore(hStore, 0);
+
+#elif defined(OF_LINUX)
+
+#elif defined(OF_MAC_OS_X)
+
+#endif
+
+ 	[pool release];
+
+ 	[self X509_fillProperties];
+
+ 	return self;
+}
+
++ (instancetype)certificateWithSystemCA
+{
+	return [[[self alloc] initWithSystemCA] autorelease];
+}
+#endif
+
+- (void)parseDER:(OFDataArray *)der
+{
+	int ret = 0;
+
+	if ((ret = mbedtls_x509_crt_parse_der(self.certificate, (const unsigned char *)[der items], ([der itemSize] * [der count]))) != 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+}
+
+- (void)parsePEM:(OFString *)pem
+{
+	int ret = 0;
+
+	ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[pem UTF8String], [pem UTF8StringLength]);
+
+	if (ret < 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+
+	if (ret > 0)
+		of_log(@"Parsed %d certificates", ret);
 }
 
 - (OFString*)description

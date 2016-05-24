@@ -1,4 +1,5 @@
 #import <ObjFW/OFObject.h>
+#import "macros.h"
 
 #include <mbedtls/x509.h>
 #include <mbedtls/x509_crt.h>
@@ -144,10 +145,10 @@
 + (instancetype)certificateWithX509Struct:(mbedtls_x509_crt *)crt;
 
 
-+ (instancetype)certificatesWithData:(OFDataArray *)data;
++ (instancetype)certificateWithPEMString:(OFString *)string;
 
 
-+ (instancetype)certificateWithDERData:(OFDataArray *)data;
++ (instancetype)certificateWithPEMorDERData:(OFDataArray *)data;
 
 
 - (instancetype)initWithFile:(OFString *)file;
@@ -159,10 +160,10 @@
 - (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt;
 
 
-- (instancetype)initWithCertificatesData:(OFDataArray *)data;
+- (instancetype)initWithCertificatePEMString:(OFString *)string;
 
 
-- (instancetype)initWithCertificateDERData:(OFDataArray *)data;
+- (instancetype)initWithCertificatePEMorDERData:(OFDataArray *)data;
 
 
 - (void)parseFilesAtPath:(OFString *)path;
@@ -189,5 +190,15 @@
 - (OFString *)PEM;
 
 - (OFString *)PEMwithHeader:(OFString *)header bottom:(OFString *)bottom;
+
+#if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
+- (instancetype)initWithSystemCA;
+
++ (instancetype)certificateWithSystemCA;
+#endif
+
+- (void)parseDER:(OFDataArray *)der;
+
+- (void)parsePEM:(OFString *)pem;
 
 @end

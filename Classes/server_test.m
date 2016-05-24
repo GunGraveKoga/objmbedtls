@@ -8,92 +8,6 @@
 
 #import <WinBacktrace.h>
 
-typedef enum  {
-  None,
-  Certificate,
-  PKCS7,
-  X509CRL
-} OutputType;
-
-const char* GetTypeName(OutputType type)
-{
-
-  switch (type)
-  {
-
-  case Certificate:
-    return "CERTIFICATE";
-
-  case PKCS7:
-    return "PKCS7";
-
-  case X509CRL:
-    return "X509 CRL";
-
-  case None:
-    return NULL;
-
-  default:
-    break;
-
-  }
-
-  return NULL;
-}
-
-
-bool IsPKCS7(DWORD encodeType)
-
-{
-  return ((encodeType & PKCS_7_ASN_ENCODING) == PKCS_7_ASN_ENCODING);
-
-}
-
-void DisplayPEM(OutputType outputType, BYTE const* pData, DWORD cbLength)
-
-{
- char const* type = GetTypeName(outputType);
-
- if ( type == NULL ) return;
-
-	/*OFMutableString* crt = [OFMutableString string];
-	OFDataArray* dt = [OFDataArray dataArrayWithItemSize:sizeof(char)];
-	[crt appendFormat:@"-----BEGIN %s-----", type];
-	
-	[crt appendString:[dt stringByBase64Encoding]];
-	[crt appendFormat:@"-----END %s-----", type];
-	[crt makeImmutable];*/
-	static OFMutableString* pem = nil;
-
-	if (!pem)
-		pem = [OFMutableString string];
-
-	MBEDX509Certificate* crt = nil;
-
-	OFDataArray* dt = [OFDataArray dataArrayWithItemSize:sizeof(char)];
-	[dt addItems:(const void *)pData count:(size_t)cbLength];
-	@try {
-
-		crt = [MBEDX509Certificate certificateWithDERData:dt];
-
-		of_log(@"DateS %@", [crt.issued localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]);
-		@try {
-			of_log(@"DateE %@", [crt.expires localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]);
-		}@catch(id e) {
-			of_log(@"%04d %02d %02d", [crt.expires localYear], [crt.expires localDayOfMonth], [crt.expires localMonthOfYear]);
-		}
-		of_log(@"%@", [OFDate distantFuture]);
-
-		of_log(@"%@", crt);
-		of_log(@"%@", [crt PEM]);
-	}@catch (OFException* e) {
-		of_log(@"%@", e);
-		[e printDebugBacktrace];
-		crt = nil;
-	}
-
-}
-
 @interface Test: OFObject<OFApplicationDelegate>
 {
 
@@ -108,54 +22,58 @@ OF_APPLICATION_DELEGATE(Test)
 - (void)applicationDidFinishLaunching
 {
 	WinBacktrace* plugin = [OFPlugin pluginFromFile:@"WinBacktrace"];
+ 	
+ 	MBEDX509Certificate* CA = [MBEDX509Certificate certificateWithSystemCA];
+ 	size_t idx = 0;
+ 	while(true) {
+ 		MBEDX509Certificate* n = [CA next];
 
-	HCERTSTORE hStore = CertOpenSystemStore(0, "CA");
+ 		if (n == nil)
+ 			break;
+ 		@try {
+ 			of_log(@"%@", n);
+ 		}@catch(id e){}
+ 		idx++;
+ 	}
 
-	for ( PCCERT_CONTEXT pCertCtx = CertEnumCertificatesInStore(hStore, NULL);
+ 	of_log(@"Total %zu certificates", idx+1);
 
-       pCertCtx != NULL;
+ 	MBEDCRL* CRL = [MBEDCRL crlWithSystemCRL];
 
-       pCertCtx = CertEnumCertificatesInStore(hStore, pCertCtx) )
- {
-	@autoreleasepool {
-		OutputType outputType = IsPKCS7(pCertCtx->dwCertEncodingType) ? PKCS7 : Certificate;
+ 	of_log(@"CRL: %@", CRL);
 
-   		DisplayPEM(outputType, pCertCtx->pbCertEncoded, pCertCtx->cbCertEncoded);
-	}
-   
- }
+ 	idx = 0;
 
+ 	while(true) {
+ 		MBEDCRL* n = [CRL next];
 
- for ( PCCRL_CONTEXT pCrlCtx = CertEnumCRLsInStore(hStore, NULL);
+ 		if (n == nil)
+ 			break;
+ 		@try {
+ 			of_log(@"%@", n);
+ 		}@catch(id e){}
+ 		idx++;
+ 	}
 
-       pCrlCtx != NULL;
-       pCrlCtx = CertEnumCRLsInStore(hStore, pCrlCtx) )
+ 	of_log(@"Total CRL`s %zu", idx+1);
 
- {
-	@autoreleasepool {
-		OutputType outputType = IsPKCS7(pCrlCtx->dwCertEncodingType) ? PKCS7 : X509CRL;
+ 	OFString* crlpem = [CRL PEM];
 
-   		DisplayPEM(outputType, pCrlCtx->pbCrlEncoded, pCrlCtx->cbCrlEncoded);
-	} 	
-   
+ 	of_log(@"CRL PEM: %@", crlpem);
 
- }
-
- CertCloseStore(hStore, 0);
+ 	MBEDCRL* crl = [MBEDCRL crlWithPEMString:crlpem];
 
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
-	OFDataArray* srv_crt = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
-	OFDataArray* srv_cas = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
+	OFString* srv_crt = [OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len];
+	OFString* srv_cas = [OFString stringWithUTF8String:(const char *)mbedtls_test_cas_pem length:(size_t)mbedtls_test_cas_pem_len];
 	OFDataArray* srv_key = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
 
-	[srv_crt addItems:mbedtls_test_srv_crt count:mbedtls_test_srv_crt_len];
-	[srv_cas addItems: mbedtls_test_cas_pem count:mbedtls_test_cas_pem_len];
 	[srv_key addItems:mbedtls_test_srv_key count:mbedtls_test_srv_key_len];
 
-	srv.CA = [MBEDX509Certificate certificatesWithData:srv_cas];
+	srv.CA = [MBEDX509Certificate certificateWithPEMString:srv_cas];
 	srv.PK = [MBEDPKey keyWithPEM:[OFString stringWithUTF8String:[srv_key items] length:([srv_key count] * [srv_key itemSize])] password:nil isPublic:false];
-	srv.ownCertificate = [MBEDX509Certificate certificatesWithData:srv_crt];
+	srv.ownCertificate = [MBEDX509Certificate certificateWithPEMString:srv_crt];
 	srv.sslVersion = OBJMBED_SSLVERSION_TLSv1;
 	srv.requestClientCertificatesEnabled = true;
 	

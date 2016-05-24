@@ -118,8 +118,11 @@ SOEXT_TLS=
 SOEXT_X509=
 SOEXT_CRYPTO=
 
+OBJFW_SSL_SOCKET_LIBS=
+
 ifeq ($(BUILD_SYS), MINGW32)
 SHARED_LIBRARY_EXTANSION=.dll
+OBJFW_SSL_SOCKET_LIBS=-lcrypt32
 endif
 
 ifeq ($(BUILD_SYS), DARWIN)
@@ -257,7 +260,7 @@ $(OBJFW_SSL_SOCKET_LIB): $(MBEDTLS_CRYPTO_SHARED) $(MBEDTLS_X509_SHARED) $(MBEDT
 	#$(COPY) $(build_dir)/$(MBEDTLS_TLS_STATIC) $(objmbedtls_source_dir) && \
 	#$(COPY) $(build_dir)/$(MBEDTLS_X509_STATIC) $(objmbedtls_source_dir) && \
 	#$(COPY) $(build_dir)/$(MBEDTLS_CRYPTO_STATIC) $(objmbedtls_source_dir) && \
-	$(CC) --builddir $(build_dir) $(SOURCES_OBJFW_SSL_SOCKET) -I$(MBEDTLS_INCLUDES_DIR) -I$(objmbedtls_source_dir) --lib 0.9 -o $(OBJFW_SSL_SOCKET) -L$(build_dir) -l$(MBEDTLS_CRYPTO) -l$(MBEDTLS_X509) -l$(MBEDTLS_TLS) && \
+	$(CC) --builddir $(build_dir) $(SOURCES_OBJFW_SSL_SOCKET) -I$(MBEDTLS_INCLUDES_DIR) -I$(objmbedtls_source_dir) --lib 0.9 -o $(OBJFW_SSL_SOCKET) -L$(build_dir) -l$(MBEDTLS_CRYPTO) -l$(MBEDTLS_X509) -l$(MBEDTLS_TLS) $(OBJFW_SSL_SOCKET_LIBS) && \
 	$(MOVE) $(OBJFW_SSL_SOCKET_LIB) $(build_dir) && \
 	$(MOVE) $(OBJFW_SSL_SOCKET_LIB_EXPORT) $(build_dir)
 	#$(DELETE) $(objmbedtls_source_dir)/$(MBEDTLS_TLS_STATIC) && \
