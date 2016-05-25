@@ -23,32 +23,37 @@
 #define mbedtls_free       free
 #endif
 
+OFString *const kPEMString_X509_CRT_Old = @"X509 CERTIFICATE";
+OFString *const kPEMString_X509_CRT =     @"CERTIFICATE";
+OFString *const kPEMString_X509_CRT_Pair =    @"CERTIFICATE PAIR";
+OFString *const kPEMString_X509_CRT_Trusted = @"TRUSTED CERTIFICATE";
+OFString *const kPEMString_X509_CSR_Old = @"NEW CERTIFICATE REQUEST";
+OFString *const kPEMString_X509_CSR = @"CERTIFICATE REQUEST";
+OFString *const kPEMString_X509_CRL = @"X509 CRL";
+OFString *const kPEMString_EVP_PrivateKey = @"ANY PRIVATE KEY";
+OFString *const kPEMString_PublicKey =   @"PUBLIC KEY";
+OFString *const kPEMString_RSA =      @"RSA PRIVATE KEY";
+OFString *const kPEMString_RSA_Public =   @"RSA PUBLIC KEY";
+OFString *const kPEMString_DSA =      @"DSA PRIVATE KEY";
+OFString *const kPEMString_DSA_Public =   @"DSA PUBLIC KEY";
+OFString *const kPEMString_PKCS7 =    @"PKCS7";
+OFString *const kPEMString_PKCS7_Signed = @"PKCS #7 SIGNED DATA";
+OFString *const kPEMString_PKCS8 =    @"ENCRYPTED PRIVATE KEY";
+OFString *const kPEMString_PKCS8INF = @"PRIVATE KEY";
+OFString *const kPEMString_DH_Params = @"DH PARAMETERS";
+OFString *const kPEMString_SSL_Session =  @"SSL SESSION PARAMETERS";
+OFString *const kPEMString_DSA_Params =    @"DSA PARAMETERS";
+OFString *const kPEMString_ECDSA_Public = @"ECDSA PUBLIC KEY";
+OFString *const kPEMString_EC_Parameters = @"EC PARAMETERS";
+OFString *const kPEMString_EC_Privatekey = @"EC PRIVATE KEY";
+OFString *const kPEMString_Parameters =   @"PARAMETERS";
+OFString *const kPEMString_CMS =      @"CMS";
+
+static void mbedtls_zeroize( void *v, size_t n ) {
+    volatile unsigned char *p = v; while( n-- ) *p++ = 0;
+}
 
 #if defined(MBEDTLS_MD5_C) && defined(MBEDTLS_CIPHER_MODE_CBC) && ( defined(MBEDTLS_DES_C) || defined(MBEDTLS_AES_C) )
-/*
- * Read a 16-byte hex string and convert it to binary
- */
-static int pem_get_iv( const unsigned char *s, unsigned char *iv,
-                       size_t iv_len )
-{
-    size_t i, j, k;
-
-    memset( iv, 0, iv_len );
-
-    for( i = 0; i < iv_len * 2; i++, s++ )
-    {
-        if( *s >= '0' && *s <= '9' ) j = *s - '0'; else
-        if( *s >= 'A' && *s <= 'F' ) j = *s - '7'; else
-        if( *s >= 'a' && *s <= 'f' ) j = *s - 'W'; else
-            return( MBEDTLS_ERR_PEM_INVALID_ENC_IV );
-
-        k = ( ( i & 1 ) != 0 ) ? j : j << 4;
-
-        iv[i >> 1] = (unsigned char)( iv[i >> 1] | k );
-    }
-
-    return( 0 );
-}
 
 static void pem_pbkdf1( unsigned char *key, size_t keylen,
                         unsigned char *iv,
@@ -170,16 +175,53 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
 
 #endif /* MBEDTLS_MD5_C && MBEDTLS_CIPHER_MODE_CBC && ( MBEDTLS_AES_C || MBEDTLS_DES_C ) */
 
-@implementation MBEDPEM
+static void checkForDES(OFString** pem, size_t* pos, size_t len, OFString** iv, mbedtls_cipher_type_t* alg) {
 
-+ (OFArray *)parsePEMString:(OFString *)pem header:(OFString *)header footer:(OFString *)footer password:(OFString *)password
-{
+	of_range_t range = [*pem rangeOfString:@"DEK-Info: DES-CBC," options:0 range:of_range(*pos, len)];
+
+	if (range.location == OF_NOT_FOUND)
+		return;
+	else {
+
+		*alg = MBEDTLS_CIPHER_DES_CBC;
+
+        *pos = (size_t)(range.location + range.length);
+
+        *iv = [*pem substringWithRange:of_range(*pos, 16)];
+
+        *pos += 16;
+
+	}
+
+}
+
+static void checkForDES3(OFString** pem, size_t* pos, size_t len, OFString** iv, mbedtls_cipher_type_t* alg) {
+
+	of_range_t range = [*pem rangeOfString:@"DEK-Info: DES-EDE3-CBC," options:0 range:of_range(*pos, len)];
+
+	if (range.location == OF_NOT_FOUND)
+		return;
+	else {
+
+		*alg = MBEDTLS_CIPHER_DES_EDE3_CBC;
+
+        *pos = (size_t)(range.location + range.length);
+
+        *iv = [*pem substringWithRange:of_range(*pos, 16)];
+
+        *pos += 16;
+
+	}
+}
+
+OFArray* PEMtoDER(OFString *pem, OFString *header, OFString *footer, _Nullable OFString *password) {
 	if (pem == nil)
 		@throw [OFInvalidArgumentException exception];
 
 #if defined(MBEDTLS_MD5_C) && defined(MBEDTLS_CIPHER_MODE_CBC) && ( defined(MBEDTLS_DES_C) || defined(MBEDTLS_AES_C) )
     unsigned char pem_iv[16];
     mbedtls_cipher_type_t enc_alg = MBEDTLS_CIPHER_NONE;
+    OFString* IVHex = nil;
 #else
     password = nil;
 #endif /* MBEDTLS_MD5_C && MBEDTLS_CIPHER_MODE_CBC && ( MBEDTLS_AES_C || MBEDTLS_DES_C ) */
@@ -196,7 +238,7 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
 
     while (true) {
 
-    	headerRange = [pem rangeOfString:header options:0 range:of_range(pos, [pem length])];
+    	headerRange = [pem rangeOfString:header options:0 range:of_range(pos, ([pem length] - pos))];
 
     	if (headerRange.location == OF_NOT_FOUND) {
     		if ([DERData count] > 0) {
@@ -212,7 +254,7 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
 
         pos = (size_t)(headerRange.location + headerRange.length);
 
-    	footerRange = [pem rangeOfString:footer options:0 range:of_range(pos, [pem length])];
+    	footerRange = [pem rangeOfString:footer options:0 range:of_range(pos, ([pem length] - pos))];
 
     	if (footerRange.location == OF_NOT_FOUND) {
     		if ([DERData count] > 0) {
@@ -234,62 +276,24 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
 #if defined(MBEDTLS_MD5_C) && defined(MBEDTLS_CIPHER_MODE_CBC) && ( defined(MBEDTLS_DES_C) || defined(MBEDTLS_AES_C) )
             encrtypted = true;
             pos = (size_t)(encryptionTagRange.location + encryptionTagRange.length);
+
+
 #if defined(MBEDTLS_DES_C)
-            encryptionTagRange = [pem rangeOfString:@"DEK-Info: DES-EDE3-CBC," options:0 range:of_range(pos, footerRange.location)];
+            encryptionTagRange = [pem rangeOfString:@"DEK-Info: DES-" options:0 range:of_range(pos, (footerRange.location - pos))];
 
             if (encryptionTagRange.location != OF_NOT_FOUND) {
-                enc_alg = MBEDTLS_CIPHER_DES_EDE3_CBC;
 
-                pos = (size_t)(encryptionTagRange.location + encryptionTagRange.length);
+            	pos = encryptionTagRange.location;
 
-                OFString* iv = [pem substringWithRange:of_range(pos, 8)];
+            	checkForDES3(&pem, &pos, (footerRange.location - pos), &IVHex, &enc_alg);
 
-                if (pem_get_iv([iv UTF8String], pem_iv, 8) != 0) {
-                    if ([DERData count] > 0) {
-                        break;
-
-                    } else {
-                        [pool release];
-                        [DERData release];
-
-                        @throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_INVALID_ENC_IV];
-                    }
-                }
-
-                pos += 16;
-
-            } else {
-
-                encryptionTagRange = [pem rangeOfString:@"DEK-Info: DES-CBC," options:0 range:of_range(pos, footerRange.location)];
-
-                if (encryptionTagRange.location != OF_NOT_FOUND) {
-
-                    enc_alg = MBEDTLS_CIPHER_DES_CBC;
-
-                    pos = (size_t)(encryptionTagRange.location + encryptionTagRange.length);
-
-                    OFString* iv = [pem substringWithRange:of_range(pos, 8)];
-
-                    if (pem_get_iv([iv UTF8String], pem_iv, 8) != 0) {
-                        if ([DERData count] > 0) {
-                            break;
-
-                        } else {
-                            [pool release];
-                            [DERData release];
-
-                            @throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_INVALID_ENC_IV];
-                        }
-                    }
-
-                    pos += 16;
-                }
+            	checkForDES(&pem, &pos, (footerRange.location - pos), &IVHex, &enc_alg);
 
             }
 
 #endif /* MBEDTLS_DES_C */
 #if defined(MBEDTLS_AES_C)
-            encryptionTagRange = [pem rangeOfString:@"DEK-Info: AES-" options:0 range:of_range(pos, footerRange.location)];
+            encryptionTagRange = [pem rangeOfString:@"DEK-Info: AES-" options:0 range:of_range(pos, (footerRange.location - pos))];
 
             if (encryptionTagRange.location != OF_NOT_FOUND) {
 
@@ -320,19 +324,7 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
 
                 pos += 22;
 
-                OFString* iv = [pem substringWithRange:of_range(pos, 16)];
-
-                if (pem_get_iv([iv UTF8String], pem_iv, 16) != 0) {
-                    if ([DERData count] > 0) {
-                        break;
-
-                     } else {
-                        [pool release];
-                        [DERData release];
-
-                        @throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_INVALID_ENC_IV];
-                     }
-                }
+                IVHex = [pem substringWithRange:of_range(pos, 32)];
 
                 pos += 32;
 
@@ -391,7 +383,7 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
             @throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_INVALID_DATA];
         }
 
-        OFString* BASE64String = [pem substringWithRange:of_range(pos, footerRange.location)];
+        OFString* BASE64String = [pem substringWithRange:of_range(pos, (footerRange.location - pos))];
 
         BASE64String = [BASE64String stringByReplacingOccurrencesOfString:@"\r" withString:@""];
         BASE64String = [BASE64String stringByReplacingOccurrencesOfString:@"\n" withString:@""];
@@ -429,10 +421,50 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
                 @throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_PASSWORD_REQUIRED];
             }
 
+            if (IVHex == nil) {
+
+            	if ([DERData count] > 0) {
+            		break;
+
+            	}
+
+            	[pool release];
+            	[DERData release];
+
+            	@throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_INVALID_ENC_IV];
+
+            }
+
+            size_t IVSize = [IVHex length] / 2;
+
+            if ((IVSize & 1) != 0) {
+            	if ([DERData count] > 0) {
+            		break;
+
+            	}
+
+            	[pool release];
+            	[DERData release];
+
+            	@throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_INVALID_ENC_IV];
+            }
+
+            memset(pem_iv, 0, sizeof(pem_iv));
+            of_range_t byteRange = of_range(0, 2);
+
+            for (size_t idx = 0; idx < IVSize; idx++) {
+
+            	OFString* byte = [IVHex substringWithRange:byteRange];
+
+            	pem_iv[idx] = (unsigned char)[byte hexadecimalValue];
+
+            	byteRange = of_range((byteRange.location + byteRange.length), byteRange.length);
+            }
+
             unsigned char *buf = (unsigned char *)[DER items];
             size_t buflen = [DER count];
             const unsigned char *pwd = (const unsigned char *)[password UTF8String];
-            size_t pwdlen = [password UTF8StringLength]
+            size_t pwdlen = [password UTF8StringLength];
 
 #if defined(MBEDTLS_DES_C)
             if( enc_alg == MBEDTLS_CIPHER_DES_EDE3_CBC )
@@ -449,7 +481,7 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
                 pem_aes_decrypt( pem_iv, 32, buf, buflen, pwd, pwdlen );
 #endif /* MBEDTLS_AES_C */
 
-            if( len <= 2 || buf[0] != 0x30 || buf[1] > 0x83 )
+            if( buflen <= 2 || buf[0] != 0x30 || buf[1] > 0x83 )
             {
                 if ([DERData count] > 0) {
                     break;
@@ -490,4 +522,71 @@ static void pem_aes_decrypt( unsigned char aes_iv[16], unsigned int keylen,
 
 }
 
-@end
+bool isPEM(OFDataArray* buffer) {
+
+	if (strstr( (const char *)[buffer items], "-----BEGIN" ) != NULL) {
+
+		if (strstr( (const char *)[buffer items], "-----END" ) != NULL)
+			return true;
+
+		@throw [MBEDTLSException exceptionWithObject:buffer errorNumber:MBEDTLS_ERR_PEM_INVALID_DATA];
+	}
+
+	return false;
+}
+
+bool hasHeader(OFDataArray* buffer, OFString* header) {
+	return (strstr( (const char *)[buffer items], [header UTF8String] ) != NULL);
+}
+
+bool hasFooter(OFDataArray* buffer, OFString* footer) {
+	return (strstr( (const char *)[buffer items], [footer UTF8String] ) != NULL);
+}
+
+OFString* DERtoPEM(OFDataArray *der, OFString* header, OFString* footer, size_t line_length) {
+
+	if (der == nil || [der count] <= 0)
+		@throw [OFInvalidArgumentException exception];
+
+	if (header == nil || [header length] <= 0)
+		@throw [OFInvalidArgumentException exception];
+
+	if (footer == nil || [footer length] <= 0)
+		@throw [OFInvalidArgumentException exception];
+
+	if (line_length == 0)
+		line_length = 64;
+
+	OFMutableString* pem = [[OFMutableString alloc] init];
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	[pem appendFormat:@"%@\n", header];
+
+	OFString* BASE64String = [der stringByBase64Encoding];
+
+	size_t pem_len = [BASE64String length];
+	of_range_t lineRange;
+	size_t pos = 0;
+	OFString* line = nil;
+
+	while (pem_len) {
+		lineRange = of_range(pos, (pem_len > line_length) ? line_length : pem_len);
+
+		line = [BASE64String substringWithRange:lineRange];
+		[pem appendFormat:@"%@\n", line];
+
+		pos = (size_t)(lineRange.location + lineRange.length );
+
+		pem_len -= lineRange.length;
+
+	}
+
+	[pem appendFormat:@"%@", footer];
+
+	[pool release];
+
+	[pem makeImmutable];
+
+	return pem;
+}

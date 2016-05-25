@@ -5,6 +5,7 @@
 #import "MBEDPKey.h"
 #import "MBEDSSL.h"
 #import "SSLAcceptFailedException.h"
+#import "PEM.h"
 
 #import <WinBacktrace.h>
 
@@ -56,6 +57,30 @@ OF_APPLICATION_DELEGATE(Test)
  	}
 
  	of_log(@"Total CRL`s %zu", idx+1);
+
+ 	OFArray* DERs = PEMtoDER([OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len], @"-----BEGIN CERTIFICATE-----", @"-----END CERTIFICATE-----", nil);
+
+ 	MBEDX509Certificate* dercert = [MBEDX509Certificate certificateWithPEMorDERData:DERs[0]];
+
+ 	of_log(@"%@", dercert);
+ 	OFString* pem1 = [OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len];
+ 	OFString* pem2 = DERtoPEM([dercert DER], @"-----BEGIN CERTIFICATE-----", @"-----END CERTIFICATE-----", 0);
+ 	of_log(@"%@", pem1);
+ 	of_log(@"%@", pem2);
+
+ 	of_log(@"%@", [pem1 isEqual:pem2] ? @"Yes" : @"No");
+
+ 	dercert = [MBEDX509Certificate certificateWithPEMString:pem2];
+
+ 	of_log(@"%@", dercert);
+
+ 	OFArray* PDERs = PEMtoDER([OFString stringWithUTF8String:(const char *)mbedtls_test_ca_key length:mbedtls_test_ca_key_len], @"-----BEGIN RSA PRIVATE KEY-----", @"-----END RSA PRIVATE KEY-----", @"PolarSSLTest");
+
+ 	MBEDPKey* CAKey = [MBEDPKey keyWithDER:PDERs[0] password:@"PolarSSLTest" isPublic:false];
+
+ 	of_log(@"%@", CAKey);
+
+ 	abort();
 
  	OFString* crlpem = [CRL PEM];
 
