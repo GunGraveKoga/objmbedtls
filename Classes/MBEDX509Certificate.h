@@ -1,4 +1,5 @@
 #import <ObjFW/OFObject.h>
+#import "X509Object.h"
 #import "macros.h"
 
 #include <mbedtls/x509.h>
@@ -22,7 +23,7 @@
  * @brief X509 certificate with DER & PEM support.
  */
 
-@interface MBEDX509Certificate: OFObject
+@interface MBEDX509Certificate: X509Object <X509ObjectsChain>
 {
 	mbedtls_x509_crt _certificate;
 	OFDictionary *_issuer;
@@ -41,12 +42,14 @@
 	OFString *_serialNumber;
 	MBEDPKey *_PK;
 
+	bool _parsed;
+
 }
 
 /*!
  * mbedtls certificate handler.
  */
-@property(assign, readonly)mbedtls_x509_crt* certificate;
+@property(assign, readonly)mbedtls_x509_crt* context;
 
 /*!
  * Certificate issuer field.
@@ -142,13 +145,10 @@
 + (instancetype)certificateWithFilesAtPath:(OFString *)path;
 
 
-+ (instancetype)certificateWithX509Struct:(mbedtls_x509_crt *)crt;
++ (instancetype)certificateWithPEM:(OFString *)pem;
 
 
-+ (instancetype)certificateWithPEMString:(OFString *)string;
-
-
-+ (instancetype)certificateWithPEMorDERData:(OFDataArray *)data;
++ (instancetype)certificateWithDER:(OFDataArray *)der;
 
 
 - (instancetype)initWithFile:(OFString *)file;
@@ -157,19 +157,10 @@
 - (instancetype)initWithFilesAtPath:(OFString *)path;
 
 
-- (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt;
+- (instancetype)initWithDER:(OFDataArray *)der;
 
 
-- (instancetype)initWithCertificatePEMString:(OFString *)string;
-
-
-- (instancetype)initWithCertificatePEMorDERData:(OFDataArray *)data;
-
-
-- (void)parseFilesAtPath:(OFString *)path;
-
-
-- (void)parseFile:(OFString *)file;
+- (instancetype)initWithPEM:(OFString *)pem;
 
 
 - (bool)hasCommonNameMatchingDomain: (OFString*)domain;
@@ -180,25 +171,12 @@
 
 - (bool)hasSRVNameMatchingDomain: (OFString*)domain service: (OFString*)service;
 
-
-- (MBEDX509Certificate *)next;
-
 - (bool)isRevoked:(MBEDCRL*)crl;
-
-- (OFDataArray *)DER;
-
-- (OFString *)PEM;
-
-- (OFString *)PEMwithHeader:(OFString *)header bottom:(OFString *)bottom;
 
 #if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
 - (instancetype)initWithSystemCA;
 
 + (instancetype)certificateWithSystemCA;
 #endif
-
-- (void)parseDER:(OFDataArray *)der;
-
-- (void)parsePEM:(OFString *)pem;
 
 @end

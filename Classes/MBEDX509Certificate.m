@@ -1,6 +1,7 @@
 #import <ObjFW/ObjFW.h>
 #import "macros.h"
 #import "MBEDX509Certificate.h"
+#import "PEM.h"
 #import "MBEDPKey.h"
 #import "MBEDCRL.h"
 #import "MBEDTLSException.h"
@@ -39,6 +40,9 @@
 
 
 @implementation MBEDX509Certificate
+
+@dynamic next;
+@dynamic count;
 
 static OFString* objmbedtls_x509_info_subject_alt_name(const mbedtls_x509_sequence *subject_alt_name ) {
 
@@ -142,7 +146,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
     return [OFString stringWithUTF8String:[bytes items] length:([bytes count] * [bytes itemSize])];
 }
 
-@dynamic certificate;
+@dynamic context;
 @synthesize issuer = _issuer;
 @synthesize subject = _subject;
 @synthesize subjectAlternativeNames = _subjectAlternativeNames;
@@ -174,31 +178,27 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	return [[[self alloc] initWithFilesAtPath:path] autorelease];
 }
 
-+ (instancetype)certificateWithX509Struct:(mbedtls_x509_crt *)crt
++ (instancetype)certificateWithPEM:(OFString *)pem
 {
-	return [[[self alloc] initWithX509Struct:crt] autorelease];
+	return [[[self alloc] initWithPEM:pem] autorelease];
 }
 
-+ (instancetype)certificateWithPEMString:(OFString *)string
++ (instancetype)certificateWithDER:(OFDataArray *)der
 {
-	return [[[self alloc] initWithCertificatePEMString:string] autorelease];
-}
-
-+ (instancetype)certificateWithPEMorDERData:(OFDataArray *)data
-{
-	return [[[self alloc] initWithCertificatePEMorDERData:data] autorelease];
+	return [[[self alloc] initWithDER:der] autorelease];
 }
 
 - (instancetype)init
 {
 	self = [super init];
 
-	mbedtls_x509_crt_init(self.certificate);
+	mbedtls_x509_crt_init( self.context);
 
 	_isCA = false;
 	_maxPathLength = 0;
 	_version = 0;
 	_PK = nil;
+	_parsed = false;
 
 	return self;
 }
@@ -216,7 +216,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	[_extendedKeyUsage release];
 	[_serialNumber release];
 	[_PK release];
-	mbedtls_x509_crt_free(self.certificate);
+	mbedtls_x509_crt_free( self.context);
 
 	[super dealloc];
 }
@@ -237,8 +237,6 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 		@throw e;
 	}
 
-	[self X509_fillProperties];
-
 	return self;
 }
 
@@ -257,44 +255,20 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 		@throw e;
 	}
 
-	[self X509_fillProperties];
-
 	return self;
 }
 
-- (instancetype)initWithX509Struct:(mbedtls_x509_crt *)crt
-{
-
-	self = [self init];
-
-	if (crt == NULL) {
-		[self release];
-		@throw [OFInvalidArgumentException exception];
-	}
-
-	int ret = 0;
-
-	if ((ret = mbedtls_x509_crt_parse_der(self.certificate, crt->raw.p, crt->raw.len)) != 0) {
-		[self release];
-		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
-	}
-
-	[self X509_fillProperties];
-
-	return self;
-}
-
-- (instancetype)initWithCertificatePEMString:(OFString *)string
+- (instancetype)initWithPEM:(OFString *)pem
 {
 	self = [self init];
 
-	if ([string UTF8StringLength] <= 0) {
+	if ([pem UTF8StringLength] <= 0) {
 		[self release];
 		@throw [OFInvalidArgumentException exception];
 	}
 
 	@try {
-		[self parsePEM:string];
+		[self parsePEM:pem];
 
 	}@catch(id e) {
 		[self release];
@@ -306,32 +280,31 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
 
-	[self X509_fillProperties];
-
 	return self;
 }
-- (instancetype)initWithCertificatePEMorDERData:(OFDataArray *)data
+
+- (instancetype)initWithDER:(OFDataArray *)der
 {
 	self = [self init];
 
-	if ([data count] <= 0) {
+	if ([der count] <= 0) {
 		[self release];
+
 		@throw [OFInvalidArgumentException exception];
 	}
 
-	int ret = 0;
+	@try {
+		[self parseDER:der];
 
-	if (strstr( (const char *)[data items], "-----BEGIN CERTIFICATE-----" ) != NULL) {
-		if (*((char *)[data lastItem]) != '\0')
-			[data addItems:"" count:1];
-	}
-
-	if ((ret = mbedtls_x509_crt_parse(self.certificate, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
+	} @catch (id e) {
 		[self release];
-		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
-	}
 
-	[self X509_fillProperties];
+		if ([e isKindOfClass:[MBEDTLSException class]]) {
+			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
+		}
+
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+	}
 
 	return self;
 }
@@ -503,7 +476,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	char* buf = (char *)__builtin_alloca(bufSize);
 	memset(buf, 0, bufSize);
 
-	ret = mbedtls_x509_serial_gets(buf, bufSize, &(self.certificate->serial));
+	ret = mbedtls_x509_serial_gets(buf, bufSize, &( self.context->serial));
 	if (ret > 0)
 		self.serialNumber = [OFString stringWithUTF8String:buf length:ret];
 	else {
@@ -516,7 +489,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 	OFString* dnString = nil;
 
-	ret = mbedtls_x509_dn_gets(buf, bufSize, &(self.certificate->issuer));
+	ret = mbedtls_x509_dn_gets(buf, bufSize, &( self.context->issuer));
 	if (ret > 0) {
 
 		@try {
@@ -539,7 +512,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 	memset(buf, 0, bufSize);
 
-	ret = mbedtls_x509_dn_gets(buf, bufSize, &(self.certificate->subject));
+	ret = mbedtls_x509_dn_gets(buf, bufSize, &( self.context->subject));
 	if (ret > 0) {
 
 		@try {
@@ -559,14 +532,14 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		[self release];
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
-	if (self.certificate->ext_types & MBEDTLS_X509_EXT_SUBJECT_ALT_NAME)
-		self.subjectAlternativeNames = [self X509_dictionaryFromX509AltNames:objmbedtls_x509_info_subject_alt_name(&(self.certificate->subject_alt_names))];
+	if ( self.context->ext_types & MBEDTLS_X509_EXT_SUBJECT_ALT_NAME)
+		self.subjectAlternativeNames = [self X509_dictionaryFromX509AltNames:objmbedtls_x509_info_subject_alt_name(&( self.context->subject_alt_names))];
 
-	self.version = (uint8_t)self.certificate->version;
+	self.version = (uint8_t) self.context->version;
 
 	memset(buf, 0, bufSize);
 
-	ret = mbedtls_x509_sig_alg_gets(buf, bufSize, &(self.certificate->sig_oid), self.certificate->sig_pk, self.certificate->sig_md, self.certificate->sig_opts);
+	ret = mbedtls_x509_sig_alg_gets(buf, bufSize, &( self.context->sig_oid),  self.context->sig_pk,  self.context->sig_md,  self.context->sig_opts);
 
 	if (ret > 0)
 		self.signatureAlgorithm = [OFString stringWithUTF8String:buf length:ret];
@@ -578,79 +551,42 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 	OFString* dtFormat = [OFString stringWithUTF8String:"%Y-%m-%d %H:%M:%S"];
 	OFString* dtSString = [OFString stringWithFormat:@"%04d-%02d-%02d %02d:%02d:%02d",
-			self.certificate->valid_from.year, self.certificate->valid_from.mon,
-            self.certificate->valid_from.day,  self.certificate->valid_from.hour,
-            self.certificate->valid_from.min,  self.certificate->valid_from.sec
+			 self.context->valid_from.year,  self.context->valid_from.mon,
+             self.context->valid_from.day,   self.context->valid_from.hour,
+             self.context->valid_from.min,   self.context->valid_from.sec
 		];
 	OFString* dtEString = [OFString stringWithFormat:@"%04d-%02d-%02d %02d:%02d:%02d",
-			self.certificate->valid_to.year, self.certificate->valid_to.mon,
-            self.certificate->valid_to.day,  self.certificate->valid_to.hour,
-            self.certificate->valid_to.min,  self.certificate->valid_to.sec
+			 self.context->valid_to.year,  self.context->valid_to.mon,
+             self.context->valid_to.day,   self.context->valid_to.hour,
+             self.context->valid_to.min,   self.context->valid_to.sec
 		];
 
 	self.issued = [OFDate dateWithLocalDateString:dtSString format:dtFormat];
 
 	self.expires = [OFDate dateWithLocalDateString:dtEString format:dtFormat];
 
-	self.keySize = (int)mbedtls_pk_get_bitlen( &(self.certificate->pk) );
+	self.keySize = (int)mbedtls_pk_get_bitlen( &( self.context->pk) );
 
-	if( self.certificate->ext_types & MBEDTLS_X509_EXT_NS_CERT_TYPE )
-		self.type = objmbedtls_x509_info_cert_type(self.certificate->ns_cert_type);
+	if(  self.context->ext_types & MBEDTLS_X509_EXT_NS_CERT_TYPE )
+		self.type = objmbedtls_x509_info_cert_type( self.context->ns_cert_type);
 
-	if( self.certificate->ext_types & MBEDTLS_X509_EXT_KEY_USAGE )
-		self.keyUsage = [self X509_arrayFromX509KeyUsageString:objmbedtls_x509_info_key_usage(self.certificate->key_usage)];
+	if(  self.context->ext_types & MBEDTLS_X509_EXT_KEY_USAGE )
+		self.keyUsage = [self X509_arrayFromX509KeyUsageString:objmbedtls_x509_info_key_usage( self.context->key_usage)];
 
-	if( self.certificate->ext_types & MBEDTLS_X509_EXT_EXTENDED_KEY_USAGE )
-		self.extendedKeyUsage = [self X509_arrayFromX509KeyUsageString:objmbedtls_x509_info_ext_key_usage(&(self.certificate->ext_key_usage))];
+	if(  self.context->ext_types & MBEDTLS_X509_EXT_EXTENDED_KEY_USAGE )
+		self.extendedKeyUsage = [self X509_arrayFromX509KeyUsageString:objmbedtls_x509_info_ext_key_usage(&( self.context->ext_key_usage))];
 
-	if( self.certificate->ext_types & MBEDTLS_X509_EXT_BASIC_CONSTRAINTS ) {
-		self.isCA = self.certificate->ca_istrue ? true : false;
+	if(  self.context->ext_types & MBEDTLS_X509_EXT_BASIC_CONSTRAINTS ) {
+		self.isCA =  self.context->ca_istrue ? true : false;
 
-		if (self.certificate->max_pathlen > 0)
-			self.maxPathLength = (size_t)(self.certificate->max_pathlen - 1);
+		if ( self.context->max_pathlen > 0)
+			self.maxPathLength = (size_t)( self.context->max_pathlen - 1);
 	}
 
 
 	objc_autoreleasePoolPop(pool);
-}
 
-- (void)parseFilesAtPath:(OFString *)path
-{
-	OFFileManager* filemanager = [OFFileManager defaultManager];
-
-	if ([filemanager directoryExistsAtPath:path]) {
-
-		OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
-		size_t count = 0;
-		for (OFString* subPath in [filemanager contentsOfDirectoryAtPath:path]) {
-
-			if ([filemanager fileExistsAtPath:subPath]) {
-
-				@try {
-					[self parseFile:subPath];
-
-					count++;
-
-				} @catch(id e) {}
-			}
-
-			[pool releaseObjects];
-
-			continue;
-		}
-
-		[pool release];
-
-		if (count <= 0) {
-
-			@throw [OFInvalidArgumentException exception];
-		}
-
-		return;
-	}
-
-	@throw [OFInvalidArgumentException exception];
+	_parsed = true;
 }
 
 - (void)parseFile:(OFString *)file
@@ -796,20 +732,26 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	*/
 }
 
-- (MBEDX509Certificate *)next
+- (id<X509Object>)next
 {
 	static mbedtls_x509_crt *crt = NULL; 
 	static mbedtls_x509_crt *prev = NULL;
 
 	if (crt == NULL)
-		crt = self.certificate;
+		crt =  self.context;
 
 	while( crt->version != 0 && crt->next != NULL )
     {
         prev = crt;
         crt = crt->next;
 
-        return [MBEDX509Certificate certificateWithX509Struct:crt];
+        OFDataArray* DER = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
+
+        id<X509Object> obj = [[MBEDX509Certificate alloc] initWithDER:DER];
+
+        [DER release];
+
+        return [obj autorelease];
     }
 
     crt = NULL;
@@ -818,55 +760,57 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	return nil;
 }
 
+- (size_t)count
+{
+	mbedtls_x509_crt *crt = self.context; 
+	mbedtls_x509_crt *prev = NULL;
+
+	size_t idx = 0;
+
+	if (crt->version != 0)
+		idx++;
+	else
+		return 0;
+
+	while(crt->next != NULL ) {
+		prev = crt;
+        crt = crt->next;
+
+        idx++;
+	}
+
+	return idx;
+}
+
 - (bool)isRevoked:(MBEDCRL*)crl
 {
-	return (bool)mbedtls_x509_crt_is_revoked(self.certificate, crl.context);
+	return (bool)mbedtls_x509_crt_is_revoked( self.context, crl.context);
 }
 
 - (OFDataArray *)DER
 {
 	OFDataArray* der = [OFDataArray dataArrayWithItemSize:sizeof(char)];
 
-	[der addItems:self.certificate->raw.p count:self.certificate->raw.len];
+	[der addItems: self.context->raw.p count: self.context->raw.len];
 
 	return der;
 }
 
 - (OFString *)PEM
 {
-	return [self PEMwithHeader:@"-----BEGIN CERTIFICATE-----\n" bottom:@"-----END CERTIFICATE-----\n"];
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+	OFDataArray* der = [self DER];
+
+	OFString* pem = DERtoPEM(der, @"-----BEGIN CERTIFICATE-----", @"-----END CERTIFICATE-----", 0);
+	
+	[pem retain];
+
+	[pool release];
+
+	return [pem autorelease];
 }
 
-- (OFString *)PEMwithHeader:(OFString *)header bottom:(OFString *)bottom
-{
-	int ret = 0;
-	size_t bufLen = 0;
-
-	size_t olen = 0;
-
-	unsigned char* buffer = NULL;
-
-	mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.certificate->raw.p, self.certificate->raw.len, NULL, 0, &bufLen);
-
-	buffer = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * (bufLen + 1));
-
-	if (buffer == NULL)
-		@throw [OFOutOfMemoryException exceptionWithRequestedSize:bufLen];
-
-	if ((ret = mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.certificate->raw.p, self.certificate->raw.len, buffer, bufLen + 1, &olen)) != 0) {
-
-		if (ret == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
-			of_log(@"%zu %zu", bufLen, olen);
-		}
-
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-	}
-		
-
-	return [OFString stringWithUTF8String:(const char *)buffer length:olen];
-}
-
-- (mbedtls_x509_crt *)certificate
+- (mbedtls_x509_crt *)context
 {
 	return &_certificate;
 }
@@ -874,7 +818,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 - (MBEDPKey *)PK
 {
 	if (_PK == nil) {
-		_PK = [[MBEDPKey alloc] initWithStruct:&(self.certificate->pk) isPublic:true];
+		_PK = [[MBEDPKey alloc] initWithStruct:&( self.context->pk) isPublic:true];
 	}
 
 	return _PK;
@@ -944,35 +888,37 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 {
 	int ret = 0;
 
-	if ((ret = mbedtls_x509_crt_parse_der(self.certificate, (const unsigned char *)[der items], ([der itemSize] * [der count]))) != 0)
+	if ((ret = mbedtls_x509_crt_parse_der( self.context, (const unsigned char *)[der items], ([der itemSize] * [der count]))) != 0)
 		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+
+	if (!_parsed)
+		[self X509_fillProperties];
 }
 
-- (void)parsePEM:(OFString *)pem
+- (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
 {
-	int ret = 0;
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
-	size_t buflen = [pem UTF8StringLength];
+	@try {
+		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT] password:password];
+	} @catch (id e) {
+		[pool releaseObjects];
+	}
 
-	if (((unsigned char *)[pem UTF8String])[buflen - 1] != '\0')
-		buflen += 1;
+	@try {
+		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT_Trusted] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT_Trusted] password:password];
+	} @catch (id e) {
+		[pool releaseObjects];
+	}
 
-	unsigned char* buf = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * buflen);
+	@try {
+		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT_Old] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT_Old] password:password];
+	} @catch (id e) {
+		[e retain];
+		[pool release];
 
-	if (buf == NULL)
-		@throw [OFOutOfMemoryException exceptionWithRequestedSize:buflen];
-
-	memset(buf, 0, buflen);
-	memcpy(buf, [pem UTF8String], [pem UTF8StringLength]);
-	buf[buflen-1] = '\0';
-
-	ret = mbedtls_x509_crt_parse(self.certificate, buf, buflen);
-
-	if (ret < 0)
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-
-	if (ret > 0)
-		of_log(@"Parsed %d certificates", ret);
+		@throw [e autorelease];
+	}
 }
 
 - (OFString*)description
@@ -1058,7 +1004,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	size_t key_size_str_len = (size_t)(sizeof(key_size_str) * sizeof(char));
 	memset(key_size_str, 0, key_size_str_len);
 
-	if ((mbedtls_x509_key_size_helper( key_size_str, key_size_str_len, mbedtls_pk_get_name( &(self.certificate->pk) ))) != 0) {
+	if ((mbedtls_x509_key_size_helper( key_size_str, key_size_str_len, mbedtls_pk_get_name( &( self.context->pk) ))) != 0) {
 		[ret appendFormat: @"Key Size: %d bits", self.keySize];
 	} else {
 		[ret appendFormat: @"%s: %d bits", key_size_str, self.keySize];

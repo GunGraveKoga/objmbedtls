@@ -220,7 +220,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)setChainForCA:(MBEDX509Certificate *)ca withCRL:(MBEDCRL *)crl
 {
-	mbedtls_ssl_conf_ca_chain(self.config, ca.certificate, (crl != nil) ? crl.context : NULL);
+	mbedtls_ssl_conf_ca_chain(self.config, ca.context, (crl != nil) ? crl.context : NULL);
 }
 
 - (void)configureOwnCertificateForSocket:(id<OFTLSSocket>)socket
@@ -261,7 +261,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)ownCertificate:(MBEDX509Certificate *)crt privateKey:(MBEDPKey *)pk
 {
-	mbedtls_ssl_conf_own_cert(self.config, crt.certificate, pk.context);
+	mbedtls_ssl_conf_own_cert(self.config, crt.context, pk.context);
 }
 
 - (void)setHostName:(OFString *)host
