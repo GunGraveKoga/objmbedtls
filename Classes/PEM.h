@@ -31,11 +31,12 @@ OBJMBEDTLS_EXPORT OFString *const kPEMString_EC_Privatekey;
 OBJMBEDTLS_EXPORT OFString *const kPEMString_Parameters;
 OBJMBEDTLS_EXPORT OFString *const kPEMString_CMS;
 
-OFArray* PEMtoDER(OFString *pem, OFString *header, OFString *footer, _Nullable OFString *password);
+OBJMBEDTLS_EXPORT OFArray* PEMtoDER(OFString *pem, OFString *header, OFString *footer, _Nullable OFString *password);
 
-bool isPEM(OFDataArray* buffer);
+OBJMBEDTLS_EXPORT OFString* DERtoPEM(OFDataArray *der, OFString* header, OFString* footer, size_t line_length);
 
-bool hasHeader(OFDataArray* buffer, OFString* header);
-bool hasFooter(OFDataArray* buffer, OFString* footer);
+OBJMBEDTLS_EXPORT bool isPEM(OFDataArray* buffer);
 
-OFString* DERtoPEM(OFDataArray *der, OFString* header, OFString* footer, size_t line_length);
+OBJMBEDTLS_EXPORT bool hasHeader(OFDataArray* buffer, OFString* header);
+
+OBJMBEDTLS_EXPORT bool hasFooter(OFDataArray* buffer, OFString* footer);
