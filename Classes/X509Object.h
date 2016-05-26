@@ -38,7 +38,7 @@
 }
 
 /*
-* Must be overwrited in children class
+* Must be overwrited in child class
 *
 *- (void)parseDER:(OFDataArray *)der
 *- (void)parseFile:(OFString *)fileName
