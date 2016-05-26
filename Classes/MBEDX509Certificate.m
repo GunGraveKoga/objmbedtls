@@ -899,38 +899,49 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 - (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
 {
+	
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
-	bool parsed = true;
+	OFArray* tokens = @[
+			kPEMString_X509_CRT,
+			kPEMString_X509_CRT_Trusted,
+			kPEMString_X509_CRT_Old
+		];
+
+	bool parsed = false;
 
 	@try {
-		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT] password:password];
-	} @catch (id e) {
-		[pool releaseObjects];
 
-		parsed = false;
-	}
+		for (OFString* token in tokens) {
 
-	if (parsed)
-		goto end;
+			void* loop_pool = objc_autoreleasePoolPush();
 
-	parsed = true;
+			@try {
+				[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", token] footer:[OFString stringWithFormat:@"-----END %@-----", token] password:password];
 
-	@try {
-		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT_Trusted] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT_Trusted] password:password];
-	} @catch (id e) {
-		[pool releaseObjects];
+			} @catch(id e) {
+				if ([e isKindOfClass:[MBEDTLSException class]]) {
 
-		parsed = false;
-	}
+					if (((MBEDTLSException *)e).errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT) {
 
-	if (parsed)
-		goto end;
+						objc_autoreleasePoolPop(loop_pool);
 
-	parsed = true;
+						continue;
+					}
+				}
 
-	@try {
-		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT_Old] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT_Old] password:password];
+				[e retain];
+				objc_autoreleasePoolPop(loop_pool);
+
+				@throw [e autorelease];
+			}
+
+			parsed = true;
+			objc_autoreleasePoolPop(loop_pool);
+			
+			break;
+		}
+
 	} @catch (id e) {
 		[e retain];
 		[pool release];
@@ -938,9 +949,11 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		@throw [e autorelease];
 	}
 
-	end:
+	
+	[pool release];
 
-		[pool release];
+	if (!parsed)
+		@throw [OFInvalidArgumentException exception];
 }
 
 - (OFString*)description

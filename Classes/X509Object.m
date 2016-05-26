@@ -1,6 +1,9 @@
 #import <ObjFW/ObjFW.h>
 #import "X509Object.h"
 #import "PEM.h"
+#import "MBEDTLSException.h"
+
+#include <mbedtls/pem.h>
 
 @implementation X509Object
 
@@ -89,7 +92,7 @@
 			}
 
 		} else {
-			@throw [OFInvalidArgumentException exception];
+			@throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT];
 		}
 
 

@@ -94,7 +94,14 @@ OF_APPLICATION_DELEGATE(Test)
 
  	OFDataArray* d64 = [OFDataArray dataArrayWithBase64EncodedString:b64];
 
- 	MBEDX509Certificate* crtb64 = [MBEDX509Certificate certificateWithDER:d64];
+ 	MBEDX509Certificate* crtb64;
+
+ 	@try {
+ 		crtb64 = [MBEDX509Certificate certificateWithPEM:[OFString stringWithFormat:@"-----BEGIN MY SUPER PUPER CERT-----\n%@\n-----END MY SUPER PUPER CERT-----"]];
+
+ 	}@catch(id e) {
+ 		of_log(@"%@", e);
+ 	}
 
  	of_log(@"From BASE64 DATA\n%@", crtb64);
 
