@@ -23,9 +23,11 @@
 
 @end
 
+@class X509Object;
+
 @protocol X509ObjectsChain <OFObject>
 
-@property OF_NULLABLE_PROPERTY (copy, readonly)id<X509Object> next;
+@property OF_NULLABLE_PROPERTY (copy, readonly)X509Object* next;
 
 @property (assign, readonly)size_t count;
 

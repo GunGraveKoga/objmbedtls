@@ -27,7 +27,7 @@ OF_APPLICATION_DELEGATE(Test)
  	MBEDX509Certificate* CA = [MBEDX509Certificate certificateWithSystemCA];
  	size_t idx = 0;
  	while(true) {
- 		MBEDX509Certificate* n = [CA next];
+ 		MBEDX509Certificate* n = (MBEDX509Certificate*)[CA next];
 
  		if (n == nil)
  			break;
@@ -60,7 +60,7 @@ OF_APPLICATION_DELEGATE(Test)
 
  	OFArray* DERs = PEMtoDER([OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len], @"-----BEGIN CERTIFICATE-----", @"-----END CERTIFICATE-----", nil);
 
- 	MBEDX509Certificate* dercert = [MBEDX509Certificate certificateWithPEMorDERData:DERs[0]];
+ 	MBEDX509Certificate* dercert = [MBEDX509Certificate certificateWithDER:DERs[0]];
 
  	of_log(@"%@", dercert);
  	OFString* pem1 = [OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len];
@@ -70,7 +70,7 @@ OF_APPLICATION_DELEGATE(Test)
 
  	of_log(@"%@", [pem1 isEqual:pem2] ? @"Yes" : @"No");
 
- 	dercert = [MBEDX509Certificate certificateWithPEMString:pem2];
+ 	dercert = [MBEDX509Certificate certificateWithPEM:pem2];
 
  	of_log(@"%@", dercert);
 
@@ -79,8 +79,6 @@ OF_APPLICATION_DELEGATE(Test)
  	MBEDPKey* CAKey = [MBEDPKey keyWithDER:PDERs[0] password:@"PolarSSLTest" isPublic:false];
 
  	of_log(@"%@", CAKey);
-
- 	abort();
 
  	OFString* crlpem = [CRL PEM];
 
@@ -96,7 +94,7 @@ OF_APPLICATION_DELEGATE(Test)
 
  	OFDataArray* d64 = [OFDataArray dataArrayWithBase64EncodedString:b64];
 
- 	MBEDX509Certificate* crtb64 = [MBEDX509Certificate certificateWithPEMorDERData:d64];
+ 	MBEDX509Certificate* crtb64 = [MBEDX509Certificate certificateWithDER:d64];
 
  	of_log(@"From BASE64 DATA\n%@", crtb64);
 
@@ -107,9 +105,9 @@ OF_APPLICATION_DELEGATE(Test)
  	OFString* certpem = [OFString stringWithContentsOfFile:@"./certificate.pem"];
  	OFDataArray* dt = [OFDataArray dataArrayWithContentsOfFile:@"./certificate.pem"];
 
- 	MBEDX509Certificate* cert = [MBEDX509Certificate certificateWithPEMorDERData:dt];
+ 	MBEDX509Certificate* cert = [MBEDX509Certificate certificateWithPEM:[OFString stringWithUTF8String:(const char *)[dt items] length:[dt count]]];
  	of_log(@"Data %@", cert);
- 	cert = [MBEDX509Certificate certificateWithPEMString:certpem];
+ 	cert = [MBEDX509Certificate certificateWithPEM:certpem];
  	of_log(@"String %@", cert);
  	cert = [MBEDX509Certificate certificateWithFile:@"./test.pem"];
  	of_log(@"File %@", cert);
@@ -131,9 +129,9 @@ OF_APPLICATION_DELEGATE(Test)
 
 	[srv_key addItems:mbedtls_test_srv_key count:mbedtls_test_srv_key_len];
 
-	srv.CA = [MBEDX509Certificate certificateWithPEMString:srv_cas];
+	srv.CA = [MBEDX509Certificate certificateWithPEM:srv_cas];
 	srv.PK = [MBEDPKey keyWithPEM:[OFString stringWithUTF8String:[srv_key items] length:([srv_key count] * [srv_key itemSize])] password:nil isPublic:false];
-	srv.ownCertificate = [MBEDX509Certificate certificateWithPEMString:srv_crt];
+	srv.ownCertificate = [MBEDX509Certificate certificateWithPEM:srv_crt];
 	srv.sslVersion = OBJMBED_SSLVERSION_TLSv1;
 	srv.requestClientCertificatesEnabled = true;
 	

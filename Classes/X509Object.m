@@ -73,27 +73,24 @@
 
 			return;
 		}
-
+		
 		if (hasHeader(data, header) && hasFooter(data, footer)) {
-			OFArray* DERs = PEMtoDER([OFString stringWithUTF8String:(const char *)[data items] length:[data count]], header, footer, password);
+			
+			OFArray* DERs;
+			
+			DERs = PEMtoDER([OFString stringWithUTF8String:(const char *)[data items] length:[data count]], header, footer, password);
 
 			for (OFDataArray* der in DERs) {
 				@autoreleasepool {
-
+					
 					[self parseDER:der];
 
 				}
 			}
 
-			[pool release];
-
-			return;
-
 		} else {
 			@throw [OFInvalidArgumentException exception];
 		}
-
-		return;
 
 
 	} @catch (id e) {
@@ -109,7 +106,7 @@
 - (void)parsePEM:(OFString *)pem
 {
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
+	
 	OFDataArray* data = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
 
 	[data addItems:[pem UTF8String] count:[pem UTF8StringLength]];

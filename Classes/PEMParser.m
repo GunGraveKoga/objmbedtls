@@ -270,7 +270,7 @@ OFArray* PEMtoDER(OFString *pem, OFString *header, OFString *footer, _Nullable O
 
         bool encrtypted = false;
 
-        of_range_t encryptionTagRange = [pem rangeOfString:@"Proc-Type: 4,ENCRYPTED" options:0 range:of_range(pos, footerRange.location)];
+        of_range_t encryptionTagRange = [pem rangeOfString:@"Proc-Type: 4,ENCRYPTED" options:0 range:of_range(pos, (footerRange.location - pos))];
 
         if (encryptionTagRange.location != OF_NOT_FOUND) {
 #if defined(MBEDTLS_MD5_C) && defined(MBEDTLS_CIPHER_MODE_CBC) && ( defined(MBEDTLS_DES_C) || defined(MBEDTLS_AES_C) )
@@ -524,9 +524,9 @@ OFArray* PEMtoDER(OFString *pem, OFString *header, OFString *footer, _Nullable O
 
 bool isPEM(OFDataArray* buffer) {
 
-	if (strstr( (const char *)[buffer items], "-----BEGIN" ) != NULL) {
+	if (hasHeader(buffer, @"-----BEGIN")) {
 
-		if (strstr( (const char *)[buffer items], "-----END" ) != NULL)
+		if (hasFooter(buffer, @"-----END"))
 			return true;
 
 		@throw [MBEDTLSException exceptionWithObject:buffer errorNumber:MBEDTLS_ERR_PEM_INVALID_DATA];
@@ -536,11 +536,17 @@ bool isPEM(OFDataArray* buffer) {
 }
 
 bool hasHeader(OFDataArray* buffer, OFString* header) {
-	return (strstr( (const char *)[buffer items], [header UTF8String] ) != NULL);
+    const char* p = (const char *)[buffer items];
+    bool res = (strstr( p, [header UTF8String] ) != NULL);
+
+	return res;
 }
 
 bool hasFooter(OFDataArray* buffer, OFString* footer) {
-	return (strstr( (const char *)[buffer items], [footer UTF8String] ) != NULL);
+    const char* p = (const char *)[buffer items];
+    bool res = (strstr( p, [footer UTF8String] ) != NULL);
+
+	return res;
 }
 
 OFString* DERtoPEM(OFDataArray *der, OFString* header, OFString* footer, size_t line_length) {

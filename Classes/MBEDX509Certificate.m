@@ -272,7 +272,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	}@catch(id e) {
 		[self release];
-
+		
 		if ([e isKindOfClass:[MBEDTLSException class]]) {
 			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
 		}
@@ -747,7 +747,9 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
         OFDataArray* DER = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
 
-        id<X509Object> obj = [[MBEDX509Certificate alloc] initWithDER:DER];
+        [DER addItems:crt->raw.p count:crt->raw.len];
+
+        X509Object* obj = [[MBEDX509Certificate alloc] initWithDER:DER];
 
         [DER release];
 
@@ -899,17 +901,33 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 {
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
+	bool parsed = true;
+
 	@try {
 		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT] password:password];
 	} @catch (id e) {
 		[pool releaseObjects];
+
+		parsed = false;
 	}
+
+	if (parsed)
+		goto end;
+
+	parsed = true;
 
 	@try {
 		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT_Trusted] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT_Trusted] password:password];
 	} @catch (id e) {
 		[pool releaseObjects];
+
+		parsed = false;
 	}
+
+	if (parsed)
+		goto end;
+
+	parsed = true;
 
 	@try {
 		[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", kPEMString_X509_CRT_Old] footer:[OFString stringWithFormat:@"-----END %@-----", kPEMString_X509_CRT_Old] password:password];
@@ -919,6 +937,10 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 		@throw [e autorelease];
 	}
+
+	end:
+
+		[pool release];
 }
 
 - (OFString*)description
