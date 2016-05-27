@@ -247,7 +247,7 @@ OFArray* PEMtoDER(OFString *pem, OFString *header, OFString *footer, _Nullable O
     		} else {
     			[pool release];
     			[DERData release];
-
+                
     			@throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_BAD_INPUT_DATA];
     		}
     	}
@@ -263,7 +263,7 @@ OFArray* PEMtoDER(OFString *pem, OFString *header, OFString *footer, _Nullable O
     		} else {
     			[pool release];
     			[DERData release];
-
+                
     			@throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_BAD_INPUT_DATA];
     		}
     	}
