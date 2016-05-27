@@ -46,7 +46,7 @@ OF_APPLICATION_DELEGATE(Test)
  	idx = 0;
 
  	while(true) {
- 		MBEDCRL* n = [CRL next];
+ 		MBEDCRL* n = (MBEDCRL*)[CRL next];
 
  		if (n == nil)
  			break;
@@ -84,7 +84,7 @@ OF_APPLICATION_DELEGATE(Test)
 
  	of_log(@"CRL PEM: %@", crlpem);
 
- 	MBEDCRL* crl = [MBEDCRL crlWithPEMString:crlpem];
+ 	MBEDCRL* crl = [MBEDCRL crlWithPEM:crlpem];
 
  	of_log(@"%@", crl);
 
@@ -92,12 +92,12 @@ OF_APPLICATION_DELEGATE(Test)
 
  	b64 = [b64 stringByReplacingOccurrencesOfString:@"\n" withString:@""];
 
- 	OFDataArray* d64 = [OFDataArray dataArrayWithBase64EncodedString:b64];
+ 	//OFDataArray* d64 = [OFDataArray dataArrayWithBase64EncodedString:b64];
 
- 	MBEDX509Certificate* crtb64;
+ 	MBEDX509Certificate* crtb64 = nil;
 
  	@try {
- 		crtb64 = [MBEDX509Certificate certificateWithPEM:[OFString stringWithFormat:@"-----BEGIN MY SUPER PUPER CERT-----\n%@\n-----END MY SUPER PUPER CERT-----"]];
+ 		crtb64 = [MBEDX509Certificate certificateWithPEM:[OFString stringWithFormat:@"-----BEGIN MY CERTIFICATE-----\n%@\n-----END MY CERTIFICATE-----", b64]];
 
  	}@catch(id e) {
  		of_log(@"%@", e);
@@ -122,10 +122,10 @@ OF_APPLICATION_DELEGATE(Test)
  	crl = [MBEDCRL crlWithFile:@"./crl.pem"];
  	of_log(@"File %@", crl);
  	crlpem = [OFString stringWithContentsOfFile:@"./crl.pem"];
- 	crl = [MBEDCRL crlWithPEMString:crlpem];
+ 	crl = [MBEDCRL crlWithPEM:crlpem];
  	of_log(@"String %@", crl);
  	dt = [OFDataArray dataArrayWithContentsOfFile:@"./crl.pem"];
- 	crl = [MBEDCRL crlWithPEMorDERData:dt];
+ 	crl = [MBEDCRL crlWithPEM:[OFString stringWithUTF8String:(const char *)[dt items] length:[dt count]]];
  	of_log(@"Data %@", crl);
 
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
