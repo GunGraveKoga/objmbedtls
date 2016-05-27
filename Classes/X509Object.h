@@ -17,6 +17,8 @@
 
 - (void)parseDER:(OFDataArray *)der;
 
+- (void)parseDER:(OFDataArray *)der password:(OFString *)password;
+
 - (void)parseFile:(OFString *)fileName;
 
 - (void)parseFilesAtPath:(OFString *)path;
@@ -43,6 +45,7 @@
 * Must be overwrited in child class
 *
 *- (void)parseDER:(OFDataArray *)der
+*- (void)parseDER:(OFDataArray *)der password:(OFString *)password (for encrypted DER data)
 *- (void)parseFile:(OFString *)fileName
 *- (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
 *

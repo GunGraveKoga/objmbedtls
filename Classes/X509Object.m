@@ -15,6 +15,11 @@
 	OF_UNRECOGNIZED_SELECTOR
 }
 
+- (void)parseDER:(OFDataArray *)der password:(OFString *)password
+{
+	OF_UNRECOGNIZED_SELECTOR
+}
+
 - (void)parseFile:(OFString *)fileName
 {
 	OF_UNRECOGNIZED_SELECTOR
@@ -70,7 +75,10 @@
 	@try {
 
 		if (!isPEM(data)) {
-			[self parseDER:data];
+			if (password == nil)
+				[self parseDER:data];
+			else
+				[self parseDER:data password:password];
 
 			[pool release];
 
@@ -86,7 +94,10 @@
 			for (OFDataArray* der in DERs) {
 				@autoreleasepool {
 					
-					[self parseDER:der];
+					if (password == nil)
+						[self parseDER:der];
+					else
+						[self parseDER:der password:password];
 
 				}
 			}
