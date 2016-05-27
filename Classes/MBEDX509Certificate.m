@@ -12,7 +12,7 @@
 #include <mbedtls/pem.h>
 #include <mbedtls/base64.h>
 
-@interface MBEDX509Certificate()
+@interface MBEDX509Certificate()<X509ObjectsChain>
 
 @property(copy, readwrite)OFDictionary* issuer;
 @property(copy, readwrite)OFDictionary* subject;
@@ -227,14 +227,13 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 
 	@try {
 		[self parseFile:file];
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:exc.errNo];
+
 	}@catch(id e) {
 		[self release];
-
-		if ([e isKindOfClass:[MBEDTLSException class]]) {
-			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
-		}
-
-		@throw e;
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
 
 	return self;
@@ -245,14 +244,13 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	self = [self init];
 	@try {
 		[self parseFilesAtPath:path];
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:exc.errNo];
+
 	}@catch(id e) {
 		[self release];
-
-		if ([e isKindOfClass:[MBEDTLSException class]]) {
-			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
-		}
-
-		@throw e;
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
 
 	return self;
@@ -270,13 +268,12 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	@try {
 		[self parsePEM:pem];
 
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:exc.errNo];
+
 	}@catch(id e) {
 		[self release];
-		
-		if ([e isKindOfClass:[MBEDTLSException class]]) {
-			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
-		}
-
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
 	}
 
@@ -296,14 +293,14 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	@try {
 		[self parseDER:der];
 
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:exc.errNo];
+
 	} @catch (id e) {
 		[self release];
-
-		if ([e isKindOfClass:[MBEDTLSException class]]) {
-			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:((MBEDTLSException *)e).errNo];
-		}
-
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+
 	}
 
 	return self;
@@ -732,7 +729,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	*/
 }
 
-- (id<X509Object>)next
+- (X509Object *)next
 {
 	static mbedtls_x509_crt *crt = NULL; 
 	static mbedtls_x509_crt *prev = NULL;
@@ -875,8 +872,6 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
  	[pool release];
 
- 	[self X509_fillProperties];
-
  	return self;
 }
 
@@ -912,6 +907,8 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 	@try {
 
+		id last_exception = nil;
+
 		for (OFString* token in tokens) {
 
 			void* loop_pool = objc_autoreleasePoolPush();
@@ -919,21 +916,28 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 			@try {
 				[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", token] footer:[OFString stringWithFormat:@"-----END %@-----", token] password:password];
 
-			} @catch(id e) {
-				if ([e isKindOfClass:[MBEDTLSException class]]) {
+			} @catch(MBEDTLSException* exc) {
 
-					if (((MBEDTLSException *)e).errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT) {
+				if (exc.errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT)
+					continue;
 
-						objc_autoreleasePoolPop(loop_pool);
+				last_exception = [exc retain];
 
-						continue;
-					}
-				}
+				@throw;
 
-				[e retain];
+			} @catch(OFException* e) {
+
+				last_exception = [e retain];
+
+				@throw;
+
+			}@finally {
+
 				objc_autoreleasePoolPop(loop_pool);
 
-				@throw [e autorelease];
+				if (last_exception != nil)
+					[last_exception autorelease];
+
 			}
 
 			parsed = true;
@@ -954,6 +958,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 	if (!parsed)
 		@throw [OFInvalidArgumentException exception];
+
 }
 
 - (OFString*)description
