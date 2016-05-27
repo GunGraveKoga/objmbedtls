@@ -1,6 +1,6 @@
 #import <ObjFW/OFObject.h>
-
 #import "macros.h"
+#import "X509Object.h"
 
 #include <mbedtls/x509.h>
 #include <mbedtls/x509_crl.h>
@@ -14,7 +14,7 @@
 OBJMBEDTLS_EXPORT OFString *const kRCSerialNumber;
 OBJMBEDTLS_EXPORT OFString *const kRCRevocationDate;
 
-@interface MBEDCRL: OFObject
+@interface MBEDCRL: X509Object<X509ObjectsChain>
 {
 	mbedtls_x509_crl _context;
 	uint8_t _version;
@@ -23,6 +23,7 @@ OBJMBEDTLS_EXPORT OFString *const kRCRevocationDate;
 	OFDate *_nextUpdate;
 	OFArray *_revokedCertificates;
 	OFString *_signatureAlgorithm;
+	bool _parsed;
 }
 
 @property(assign, readonly)mbedtls_x509_crl* context;
@@ -34,28 +35,18 @@ OBJMBEDTLS_EXPORT OFString *const kRCRevocationDate;
 @property(copy, readonly)OFString* signatureAlgorithm;
 
 + (instancetype)crl;
-+ (instancetype)crlWithPEMString:(OFString *)string;
-+ (instancetype)crlWithPEMorDERData:(OFDataArray *)data;
++ (instancetype)crlWithPEM:(OFString *)pem;
++ (instancetype)crlWithDER:(OFDataArray *)der;
 + (instancetype)crlWithFile:(OFString *)file;
-+ (instancetype)crlWithCRLStruct:(mbedtls_x509_crl *)crl;
-- (instancetype)initWithCRLStruct:(mbedtls_x509_crl *)crl;
++ (instancetype)crlWithFilesAtPath:(OFString *)path;
 - (instancetype)initWithFile:(OFString *)file;
-- (instancetype)initWithPEMString:(OFString *)string;
-- (instancetype)initWithPEMorDERData:(OFDataArray *)data;
-- (void)parseFile:(OFString *)file;
-- (OFDataArray *)DER;
-- (OFString *)PEM;
-- (OFString *)PEMWithHeader:(OFString *)header bottom:(OFString *)bottom;
+- (instancetype)initWithFilesAtPath:(OFString *)path;
+- (instancetype)initWithPEM:(OFString *)pem;
+- (instancetype)initWithDER:(OFDataArray *)der;
 
 #if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
 - (instancetype)initWithSystemCRL;
 + (instancetype)crlWithSystemCRL;
 #endif
-
-- (void)parseDER:(OFDataArray *)der;
-
-- (void)parsePEM:(OFString *)pem;
-
-- (MBEDCRL *)next;
 
 @end;

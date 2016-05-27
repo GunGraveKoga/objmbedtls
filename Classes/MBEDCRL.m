@@ -2,6 +2,7 @@
 #import "MBEDCRL.h"
 #import "MBEDTLSException.h"
 #import "MBEDInitializationFailedException.h"
+#import "PEM.h"
 
 #include <mbedtls/pem.h>
 #include <mbedtls/base64.h>
@@ -43,6 +44,7 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 	self = [super init];
 
 	mbedtls_x509_crl_init(self.context);
+	_parsed = false;
 
 	return self;
 }
@@ -64,17 +66,35 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 
 	@try {
 		[self parseFile:file];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:exc.errNo];
+
 	}@catch(id e) {
 		[self release];
-
-		if ([e isKindOfClass:[MBEDTLSException class]]) {
-			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:((MBEDTLSException *)e).errNo];
-		}
-
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDCRL class]];
+
 	}
 
-	[self CRL_fillProperties];
+	return self;
+}
+
+- (instancetype)initWithFilesAtPath:(OFString *)path
+{
+	self = [super init];
+
+	@try {
+		[self parseFilesAtPath:path];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:exc.errNo];
+
+	}@catch(id e) {
+		[self release];
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDCRL class]];
+	}
 
 	return self;
 }
@@ -84,79 +104,69 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 	return [[[self alloc] initWithFile:file] autorelease];
 }
 
-+ (instancetype)crlWithCRLStruct:(mbedtls_x509_crl *)crl
+
++ (instancetype)crlWithPEM:(OFString *)pem
 {
-	return [[[self alloc] initWithCRLStruct:crl] autorelease];
+	return [[[self alloc] initWithPEM:pem] autorelease];
 }
 
-- (instancetype)initWithCRLStruct:(mbedtls_x509_crl *)crl
++ (instancetype)crlWithDER:(OFDataArray *)der
+{
+	return [[[self alloc] initWithDER:der] autorelease];
+}
+
++ (instancetype)crlWithFilesAtPath:(OFString *)path
+{
+	return [[[self alloc] initWithFilesAtPath:path] autorelease];
+}
+
+- (instancetype)initWithPEM:(OFString *)pem
 {
 	self = [self init];
 
-	int ret = 0;
-
-	if ((ret = mbedtls_x509_crl_parse_der(self.context, crl->raw.p, crl->raw.len)) != 0) {
+	if ([pem UTF8StringLength] <= 0) {
 		[self release];
-
-		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:ret];
+		@throw [OFInvalidArgumentException exception];
 	}
 
-	[self CRL_fillProperties];
-
-	return self;
-
-}
-
-+ (instancetype)crlWithPEMString:(OFString *)string
-{
-	return [[[self alloc] initWithPEMString:string] autorelease];
-}
-
-+ (instancetype)crlWithPEMorDERData:(OFDataArray *)data
-{
-	return [[[self alloc] initWithPEMorDERData:data] autorelease];
-}
-
-- (instancetype)initWithPEMString:(OFString *)string
-{
-	self = [self init];
-
 	@try {
-		[self parsePEM:string];
+		[self parsePEM:pem];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:exc.errNo];
 
 	}@catch(id e) {
 		[self release];
 
-		if ([e isKindOfClass:[MBEDTLSException class]]) {
-			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:((MBEDTLSException*)e).errNo];
-		}
-
-		@throw e;
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDCRL class]];
 	}
-
-	[self CRL_fillProperties];
 
 	return self;
 }
 
-- (instancetype)initWithPEMorDERData:(OFDataArray *)data
+- (instancetype)initWithDER:(OFDataArray *)der
 {
 	self = [self init];
 
-	int ret = 0;
-
-	if (strstr( (const char *)[data items], "-----BEGIN X509 CRL-----" ) != NULL) {
-		if (*((char *)[data lastItem]) != '\0')
-			[data addItems:"" count:1];
-	}
-
-	if ((ret = mbedtls_x509_crl_parse(self.context, (const unsigned char *)[data items], ([data count] * [data itemSize]))) != 0) {
+	if ([der count] <= 0) {
 		[self release];
 
-		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:ret];
+		@throw [OFInvalidArgumentException exception];
 	}
 
-	[self CRL_fillProperties];
+	@try {
+		[self parseDER:der];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCRL class] errorNumber:exc.errNo];
+
+	}@catch(id e) {
+		[self release];
+
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDCRL class]];
+	}
 
 	return self;
 }
@@ -211,28 +221,6 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 
 - (OFDictionary *)CRL_dictionaryFromX509Name:(OFString *)name
 {
-	/*OFMutableDictionary* dictionary = [OFMutableDictionary dictionary];
-	OFArray* names = [name componentsSeparatedByString:[OFString stringWithUTF8String:", "]];
-
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
-	for (OFString* dn in names) {
-		OFArray* pair = [dn componentsSeparatedByString:[OFString stringWithUTF8String:"="]];
-
-		if ([dictionary objectForKey:[pair objectAtIndex:0]] == nil) {
-			[dictionary setObject:[OFList list] forKey:[pair objectAtIndex:0]];
-		}
-
-		[[dictionary objectForKey:[pair objectAtIndex:0]] appendObject:[pair objectAtIndex:1]];
-
-		[pool releaseObjects];
-	}
-
-	[pool release];
-
-	[dictionary makeImmutable];
-
-	return dictionary;*/
 
 	OFMutableDictionary* dictionary = [OFMutableDictionary dictionary];
 	
@@ -458,6 +446,8 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	self.nextUpdate = [OFDate dateWithLocalDateString:dtNext format:dtFormat];
 
 	objc_autoreleasePoolPop(pool);
+
+	_parsed = true;
 }
 
 #if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
@@ -510,8 +500,6 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
  	[pool release];
 
- 	[self CRL_fillProperties];
-
  	return self;
 }
 
@@ -528,32 +516,12 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	if ((ret = mbedtls_x509_crl_parse_der(self.context, (const unsigned char *)[der items], ([der count] * [der itemSize]))) != 0)
 		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 
+	if (!_parsed)
+		[self CRL_fillProperties];
+
 }
 
-- (void)parsePEM:(OFString *)pem
-{
-	int ret = 0;
-
-	size_t buflen = [pem UTF8StringLength];
-
-	if (((unsigned char *)[pem UTF8String])[buflen - 1] != '\0')
-		buflen += 1;
-
-	unsigned char* buf = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * buflen);
-
-	if (buf == NULL)
-		@throw [OFOutOfMemoryException exceptionWithRequestedSize:buflen];
-
-	memset(buf, 0, buflen);
-	memcpy(buf, [pem UTF8String], [pem UTF8StringLength]);
-
-	buf[buflen-1] = '\0';
-
-	if ((ret = mbedtls_x509_crl_parse(self.context, buf, buflen)) != 0)
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-}
-
-- (MBEDCRL *)next
+- (X509Object *)next
 {
 	static mbedtls_x509_crl *crl = NULL;
 
@@ -563,12 +531,40 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	while (crl->version != 0 && crl->next != NULL) {
 		crl = crl->next;
 
-		return [MBEDCRL crlWithCRLStruct:crl];
+		OFDataArray* DER = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
+
+        [DER addItems:crl->raw.p count:crl->raw.len];
+
+		X509Object* obj = [[MBEDCRL alloc] initWithDER:DER];
+
+		[DER release];
+
+        return [obj autorelease];
 	}
 
 	crl = NULL;
 
 	return nil;
+
+}
+
+- (size_t)count
+{
+	mbedtls_x509_crl *crl = self.context;
+	size_t idx = 0;
+
+	if (crl->version != 0)
+		idx++;
+	else
+		return 0;
+
+	while (crl->next != NULL) {
+		crl = crl->next;
+		idx++;
+
+	}
+
+	return idx;
 
 }
 
@@ -583,38 +579,18 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 - (OFString *)PEM
 {
-	return [self PEMWithHeader:@"-----BEGIN X509 CRL-----\n" bottom:@"-----END X509 CRL-----\n"];
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+	OFDataArray* der = [self DER];
+
+	OFString* pem = DERtoPEM(der, @"-----BEGIN X509 CRL-----", @"-----END X509 CRL-----", 0);
+	
+	[pem retain];
+
+	[pool release];
+
+	return [pem autorelease];
 }
 
-- (OFString *)PEMWithHeader:(OFString *)header bottom:(OFString *)bottom
-{
-	int ret = 0;
-	size_t bufLen = 0;
-
-	size_t olen = 0;
-
-	unsigned char* buffer = NULL;
-
-	mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.context->raw.p, self.context->raw.len, NULL, 0, &bufLen);
-
-	buffer = (unsigned char*)__builtin_alloca(sizeof(unsigned char) * (bufLen + 1));
-
-	if (buffer == NULL)
-		@throw [OFOutOfMemoryException exceptionWithRequestedSize:bufLen];
-
-	if ((ret = mbedtls_pem_write_buffer([header UTF8String], [bottom UTF8String], self.context->raw.p, self.context->raw.len, buffer, bufLen + 1, &olen)) != 0) {
-
-		if (ret == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
-			of_log(@"%zu %zu", bufLen, olen);
-		}
-
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-	}
-		
-
-	return [OFString stringWithUTF8String:(const char *)buffer length:olen];
-
-}
 
 - (OFString *)description
 {
@@ -679,6 +655,73 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	[desc makeImmutable];
 
 	return desc;
+}
+
+- (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
+{
+	
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	OFArray* tokens = @[
+			kPEMString_X509_CRL
+		];
+
+	bool parsed = false;
+
+	@try {
+
+		id last_exception = nil;
+
+		for (OFString* token in tokens) {
+
+			void* loop_pool = objc_autoreleasePoolPush();
+
+			@try {
+				[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", token] footer:[OFString stringWithFormat:@"-----END %@-----", token] password:password];
+
+			} @catch(MBEDTLSException* exc) {
+
+				if (exc.errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT)
+					continue;
+
+				last_exception = [exc retain];
+
+				@throw;
+
+			} @catch(OFException* e) {
+
+				last_exception = [e retain];
+
+				@throw;
+
+			}@finally {
+
+				objc_autoreleasePoolPop(loop_pool);
+
+				if (last_exception != nil)
+					[last_exception autorelease];
+
+			}
+
+			parsed = true;
+			objc_autoreleasePoolPop(loop_pool);
+			
+			break;
+		}
+
+	} @catch (id e) {
+		[e retain];
+		[pool release];
+
+		@throw [e autorelease];
+	}
+
+	
+	[pool release];
+
+	if (!parsed)
+		@throw [OFInvalidArgumentException exception];
+
 }
 
 @end
