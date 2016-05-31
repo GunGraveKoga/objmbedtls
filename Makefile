@@ -59,7 +59,7 @@ SOURCES_OBJFW_SSL_SOCKET= MBEDX509Certificate.m MBEDSSL.m MBEDCRL.m 	\
 						SSLReadFailedException.m SSLWriteFailedException.m MBEDTLSException.m \
 						MBEDInitializationFailedException.m PEMParser.m X509Object.m
 
-SOURCES_OBJFW_SSL_SOCKET_LIST := $(addprefix $(objmbedtls_source_dir)/,$(SOURCES_OBJFW_SSL_SOCKET))					
+SOURCES_OBJFW_SSL_SOCKET_LIST := $(addprefix $(objmbedtls_source_dir)/,$(SOURCES_OBJFW_SSL_SOCKET))				
 
 OBJS_CRYPTO=	aes.lib.o		aesni.lib.o		arc4.lib.o		\
 		asn1parse.lib.o	asn1write.lib.o	base64.lib.o	\

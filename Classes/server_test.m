@@ -128,6 +128,10 @@ OF_APPLICATION_DELEGATE(Test)
  	crl = [MBEDCRL crlWithPEM:[OFString stringWithUTF8String:(const char *)[dt items] length:[dt count]]];
  	of_log(@"Data %@", crl);
 
+ 	MBEDPKey* key = [MBEDPKey keyWithPEM:[OFString stringWithUTF8String:(const char *)mbedtls_test_ca_key length:mbedtls_test_ca_key_len] password:@"PolarSSLTest" isPublic:false];
+
+ 	of_log(@"Key from PEM %@", key);
+
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
 	OFString* srv_crt = [OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len];
