@@ -1,13 +1,59 @@
 #import <ObjFW/ObjFW.h>
 #import "MBEDPKey.h"
-#import "macros.h"
+#import "PEM.h"
+#import "MBEDTLSException.h"
+#import "MBEDInitializationFailedException.h"
+
+#if !defined(MBEDTLS_CONFIG_FILE)
+#include "mbedtls/config.h"
+#else
+#include MBEDTLS_CONFIG_FILE
+#endif
+
+#if defined(MBEDTLS_PK_PARSE_C)
+
+#include "mbedtls/pk.h"
+#include "mbedtls/asn1.h"
+#include "mbedtls/oid.h"
+
+#if defined(MBEDTLS_RSA_C)
+#include "mbedtls/rsa.h"
+#endif
+
+#if defined(MBEDTLS_ECP_C)
+#include "mbedtls/ecp.h"
+#endif
+
+#if defined(MBEDTLS_ECDSA_C)
+#include "mbedtls/ecdsa.h"
+#endif
+
+#if defined(MBEDTLS_PEM_PARSE_C)
+#include "mbedtls/pem.h"
+#endif
+
+#if defined(MBEDTLS_PKCS5_C)
+#include "mbedtls/pkcs5.h"
+#endif
+
+#if defined(MBEDTLS_PKCS12_C)
+#include "mbedtls/pkcs12.h"
+#endif
+
+#endif
+
+#if defined(MBEDTLS_PLATFORM_C)
+#include "mbedtls/platform.h"
+#else
+#include <stdlib.h>
+#define mbedtls_calloc    calloc
+#define mbedtls_free       free
+#endif
 
 @interface MBEDPKey()
 
 @property(assign, readwrite)mbedtls_pk_type_t type;
 @property(assign, readwrite)bool isPublic;
-- (OFString *)PKEY_publicKeyPEM;
-- (OFString *)PKEY_privateKeyPEM;
 - (OFDataArray *)PKEY_publicKeyDER;
 - (OFDataArray *)PKEY_privateKeyDER;
 
@@ -19,8 +65,6 @@
 @synthesize type = _type;
 @synthesize isPublic = _isPublic;
 @dynamic context;
-@dynamic PEM;
-@dynamic DER;
 @dynamic name;
 
 - (instancetype)init
@@ -30,8 +74,6 @@
 	mbedtls_pk_init(self.context);
 	self.type = MBEDTLS_PK_NONE;
 	self.isPublic = false;
-	_DER = nil;
-	_PEM = nil;
 
 	return self;
 }
@@ -39,34 +81,55 @@
 - (void)dealloc
 {
 	mbedtls_pk_free(self.context);
-	[_PEM release];
-	[_DER release];
 	[_name release];
 	[super dealloc];
 }
 
 - (OFString *)PEM
 {
-	if (_PEM == nil) {
-		if (self.isPublic)
-			_PEM = [self PKEY_publicKeyPEM];
-		else
-			_PEM = [self PKEY_privateKeyPEM];
+	if (!self.isPublic && (self.type != MBEDTLS_PK_RSA || self.type != MBEDTLS_PK_ECKEY))
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:MBEDTLS_ERR_PK_FEATURE_UNAVAILABLE];
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	OFDataArray* DER = [self DER];
+
+	OFString* PEM = nil;
+	OFString* header = nil;
+	OFString* footer = nil;
+
+	if (self.isPublic) {
+		header = [OFString stringWithUTF8String:"-----BEGIN PUBLIC KEY-----"];
+		footer = [OFString stringWithUTF8String:"-----END PUBLIC KEY-----"];
+
+	}
+	else if (self.type == MBEDTLS_PK_RSA) {
+		header = [OFString stringWithUTF8String:"-----BEGIN RSA PRIVATE KEY-----"];
+		footer = [OFString stringWithUTF8String:"-----END RSA PRIVATE KEY-----"];
+
+	} else if (self.type == MBEDTLS_PK_ECKEY) {
+		header = [OFString stringWithUTF8String:"-----BEGIN EC PRIVATE KEY-----"];
+		footer = [OFString stringWithUTF8String:"-----END EC PRIVATE KEY-----"];
+
 	}
 
-	return _PEM;
+	PEM = DERtoPEM(DER, header, footer, 0);
+
+	[PEM retain];
+
+	[pool release];
+
+	return [PEM autorelease];
 }
 
 - (OFDataArray *)DER
 {
-	if (_DER == nil) {
-		if (self.isPublic)
-			_DER = [self PKEY_publicKeyDER];
-		else
-			_DER = [self PKEY_privateKeyDER];
-	}
+	if (self.isPublic)
+		return [self PKEY_publicKeyDER];
+	else
+		return [self PKEY_privateKeyDER];
 
-	return _DER;
+	return nil;
 }
 
 - (OFString *)name
@@ -80,55 +143,18 @@
 
 - (void)parsePrivateKeyFile:(OFString *)file password:(OFString *)password
 {
-	if (file == nil || [file UTF8StringLength] <= 0)
-		@throw [OFInvalidArgumentException exception];
-
-	if ((mbedtls_pk_parse_keyfile(self.context, [file UTF8String], (password == nil) ? NULL : [password UTF8String])) != 0) {
-		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
-	}
-
-	if (self.isPublic)
-		self.isPublic = false;
+	[self parseFile:file password:password];
 }
 
 - (void)parsePublicKeyFile:(OFString *)file
 {
-	if (file == nil || [file UTF8StringLength] <= 0)
-		@throw [OFInvalidArgumentException exception];
-
-	if ((mbedtls_pk_parse_public_keyfile(self.context, [file UTF8String])) != 0) {
-		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
-	}
-
-	if (!self.isPublic)
-		self.isPublic = true;
+	[self parseFile:file];
 
 }
 
-- (void)parseFile:(OFString *)file password:(OFString *)password isPublic:(bool)flag
+- (void)parseFilesAtPath:(OFString *)path
 {
-	if (flag)
-		[self parsePublicKeyFile:file];
-	else
-		[self parsePrivateKeyFile:file password:password];
-
-
-
-	if (self.type != MBEDTLS_PK_NONE) {
-		if (!mbedtls_pk_can_do(self.context, self.type)) {
-			@throw [OFInvalidArgumentException exception];
-		}
-	} else {
-		self.type = mbedtls_pk_get_type( (const mbedtls_pk_context *)self.context );
-	}
-}
-
-- (void)parseFile:(OFString *)file password:(OFString *)password type:(mbedtls_pk_type_t)type isPublic:(bool)flag
-{
-	self.type = type;
-	[self parseFile:file password:password isPublic:flag];
+	OF_UNRECOGNIZED_SELECTOR
 }
 
 - (mbedtls_pk_context *)context
@@ -136,19 +162,6 @@
 	return &_context;
 }
 
-- (instancetype)initWithFile:(OFString *)file password:(OFString *)password isPublic:(bool)flag
-{
-	self = [self init];
-
-	@try {
-		[self parseFile:file password:password isPublic:flag];
-	} @catch(id e) {
-		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
-	}
-
-	return self;
-}
 
 - (instancetype)initWithPublicKeyFile:(OFString *)file
 {
@@ -156,8 +169,15 @@
 
 	@try {
 		[self parsePublicKeyFile:file];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDPKey class] errorNumber:exc.errNo];
+
 	} @catch(id e) {
 		[self release];
+		
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
 	}
 
@@ -170,39 +190,21 @@
 
 	@try {
 		[self parsePrivateKeyFile:file password:password];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDPKey class] errorNumber:exc.errNo];
+
 	} @catch(id e) {
 		[self release];
+
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
 	}
 
 	return self;
 }
 
-- (OFString *)PKEY_publicKeyPEM
-{
-	int ret = 0;
-	size_t bufLen = 4 * (PUB_DER_MAX_BYTES / 3);
-	unsigned char buf[bufLen];
-	memset(buf, 0, bufLen);
-
-	if ((ret = mbedtls_pk_write_pubkey_pem(self.context, buf, bufLen)) != 0)
-		return nil;
-
-	return [[OFString alloc] initWithUTF8String:(const char *)buf];
-}
-
-- (OFString *)PKEY_privateKeyPEM
-{
-	int ret = 0;
-	size_t bufLen = 4 * (PRV_DER_MAX_BYTES / 3);
-	unsigned char buf[bufLen];
-	memset(buf, 0, bufLen);
-
-	if ((ret = mbedtls_pk_write_key_pem(self.context, buf, bufLen)) != 0)
-		return nil;
-
-	return [[OFString alloc] initWithUTF8String:(const char *)buf];
-}
 
 - (OFDataArray *)PKEY_publicKeyDER
 {
@@ -210,13 +212,13 @@
 	unsigned char buf[PUB_DER_MAX_BYTES] = {0};
 	OFDataArray* bytes;
 
-	if ((size = mbedtls_pk_write_pubkey_der(self.context, buf, PUB_DER_MAX_BYTES)) < 0)
-		return nil;
+	if ((size = mbedtls_pk_write_pubkey_der(self.context, buf, PUB_DER_MAX_BYTES)) <= 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:size];
 
 	bytes = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
 	[bytes addItems:(buf + sizeof(buf) - size) count:size];
 
-	return bytes;
+	return [bytes autorelease];
 }
 
 - (OFDataArray *)PKEY_privateKeyDER
@@ -225,64 +227,214 @@
 	unsigned char buf[PRV_DER_MAX_BYTES] = {0};
 	OFDataArray* bytes;
 
-	if ((size = mbedtls_pk_write_key_der(self.context, buf, PRV_DER_MAX_BYTES)) < 0)
-		return nil;
+	if ((size = mbedtls_pk_write_key_der(self.context, buf, PRV_DER_MAX_BYTES)) <= 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:size];
 
 	bytes = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
 	[bytes addItems:(buf + sizeof(buf) - size) count:size];
 
-	return bytes;
+	return [bytes autorelease];
 }
 
-- (instancetype)initWithPEM:(OFString *)PEMString password:(OFString *)password isPublic:(bool)flag
+- (void)parseDER:(OFDataArray *)der
 {
-	self = [self init];
+	int ret = 0;
+
+	if (self.isPublic) {
+		unsigned char *p;
+
+		p = (unsigned char *)[der items];
+
+		if ((ret = mbedtls_pk_parse_subpubkey(&p, [der lastItem], self.context)) != 0) {
+			mbedtls_pk_free(self.context);
+
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+		}
+
+		return;
+
+	} else {
+		[self parseDER:der password:nil];
+	}
+}
+
+- (void)parseDER:(OFDataArray *)der password:(OFString *)password
+{
+	if (self.isPublic)
+		@throw [OFInvalidArgumentException exception];
+
+	int ret = 0;
 	
-	int ret = 0;
-
-	if (flag)
-		ret = mbedtls_pk_parse_public_key(self.context, (const unsigned char *)[PEMString UTF8String], [PEMString UTF8StringLength]);
-	else
-		ret = mbedtls_pk_parse_key(self.context, (const unsigned char *)[PEMString UTF8String], [PEMString UTF8StringLength], (password == nil) ? NULL : (const unsigned char *)[password UTF8String], (password == nil) ? 0 : [password UTF8StringLength]);
-
-	if (ret != 0) {
-		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
-	}
-
-	self.isPublic = flag;
-
-	return self;
+	if ((ret = mbedtls_pk_parse_key(self.context, [der items], [der count], (const unsigned char *)((password == nil) ? NULL : [password UTF8String]), ((password == nil) ? 0 : [password UTF8StringLength]))) != 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 }
 
-- (instancetype)initWithDER:(OFDataArray *)DERData password:(OFString *)password isPublic:(bool)flag
+- (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
+{
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	OFArray* tokens = @[
+			#if defined(MBEDTLS_RSA_C)
+			kPEMString_RSA,
+			#endif
+			#if defined(MBEDTLS_ECP_C)
+			kPEMString_EC_Privatekey,
+			#endif
+			kPEMString_PKCS8INF,
+			kPEMString_PKCS8,
+			kPEMString_PublicKey
+		];
+
+	bool parsed = false;
+
+	id last_exception = nil;
+
+	@try {
+
+		for (OFString* token in tokens) {
+
+			void* loop_pool = objc_autoreleasePoolPush();
+
+			if ([token isEqual:kPEMString_PublicKey]) {
+				if (hasHeader(data, [OFString stringWithFormat:@"-----BEGIN %@-----", token])) {
+					self.isPublic = true;
+				}
+			}
+
+			@try {
+				[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", token] footer:[OFString stringWithFormat:@"-----END %@-----", token] password: self.isPublic ? nil : password];
+
+			}@catch (MBEDTLSException* exc) {
+
+				if (exc.errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT)
+					continue;
+
+				if (exc.errNo == MBEDTLS_ERR_PEM_PASSWORD_MISMATCH)
+					last_exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:MBEDTLS_ERR_PK_PASSWORD_MISMATCH];
+				else if (exc.errNo == MBEDTLS_ERR_PEM_PASSWORD_REQUIRED)
+					last_exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:MBEDTLS_ERR_PK_PASSWORD_REQUIRED];
+				else
+					last_exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:exc.errNo];
+
+				@throw;
+
+			}@catch (id e) {
+
+				last_exception = [e retain];
+
+				@throw;
+
+			}@finally {
+
+				objc_autoreleasePoolPop(loop_pool);
+
+				if (last_exception != nil)
+					[last_exception autorelease];
+
+			}
+
+			parsed = true;
+
+			objc_autoreleasePoolPop(loop_pool);
+			
+			break;
+		}
+
+	}@catch(id e) {
+		[e retain];
+		[pool release];
+
+		@throw [e autorelease];
+	}
+
+	[pool release];
+
+	if (!parsed)
+		@throw [OFInvalidArgumentException exception];
+}
+
+- (instancetype)initWithPEM:(OFString *)pem password:(OFString *)password isPublic:(bool)flag
 {
 	self = [self init];
 
-	int ret = 0;
+	OFAutoreleasePool* pool = nil;
+	
+	@try {
 
-	if (flag)
-		ret = mbedtls_pk_parse_public_key(self.context, (const unsigned char *)[DERData items], ([DERData itemSize] * [DERData count]));
-	else
-		ret = mbedtls_pk_parse_key(self.context, (const unsigned char *)[DERData items], ([DERData itemSize] * [DERData count]), (password == nil) ? NULL : (const unsigned char *)[password UTF8String], (password == nil) ? 0 : [password UTF8StringLength]);
+		if (pem == nil || [pem UTF8StringLength] <= 0)
+			@throw [OFInvalidArgumentException exception];
 
-	if (ret != 0) {
+		if (flag)
+			[self parsePEM:pem];
+		else {
+			pool = [OFAutoreleasePool new];
+	
+			OFDataArray* data = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
+
+			[data addItems:[pem UTF8String] count:[pem UTF8StringLength]];
+
+			[self parsePEMorDER:data password:password];
+
+			[pool release];
+		}
+
+	}@catch(MBEDTLSException* exc) {
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
-	}
 
-	self.isPublic = flag;
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDPKey class] errorNumber:exc.errNo];
+
+	}@catch(id e) {
+		[self release];
+
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
+
+	}@finally {
+		if (pool == nil)
+			[pool release];
+	}
 
 	return self;
 }
 
-- (instancetype)initWithStruct:(mbedtls_pk_context *)context isPublic:(bool)flag
+- (instancetype)initWithDER:(OFDataArray *)der password:(OFString *)password isPublic:(bool)flag
 {
-	self = [super init];
+	self = [self init];
 
-	memcpy(self.context, context, sizeof(mbedtls_pk_context));
+	id exception = nil;
 
-	self.isPublic = flag;
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	@try {
+
+		if (der == nil || [der count] <= 0)
+			@throw [OFInvalidArgumentException exception];
+
+		if (flag) {
+			[self parseDER:der];
+			self.isPublic = flag;
+		}
+		else
+			[self parseDER:der password:password];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+		exception = [[MBEDInitializationFailedException alloc] initWithClass:[MBEDPKey class] errorNumber:exc.errNo];
+
+		@throw;
+
+	}@catch(id e) {
+		[self release];
+		exception = [[OFInitializationFailedException alloc] initWithClass:[MBEDPKey class]];
+
+		@throw;
+
+	}@finally {
+		[pool release];
+
+		if (exception != nil)
+			[exception autorelease];
+
+	}
 
 	return self;
 }
@@ -297,24 +449,14 @@
 	return [[[self alloc] initWithPrivateKeyFile:file password:password] autorelease];
 }
 
-+ (instancetype)keyWithFile:(OFString *)file password:(OFString *)password isPublic:(bool)flag
++ (instancetype)keyWithPEM:(OFString *)pem password:(OFString *)password isPublic:(bool)flag
 {
-	return [[[self alloc] initWithFile:file password:password isPublic:flag] autorelease];
+	return [[[self alloc] initWithPEM:pem password:password isPublic:flag] autorelease];
 }
 
-+ (instancetype)keyWithPEM:(OFString *)PEMString password:(OFString *)password isPublic:(bool)flag
++ (instancetype)keyWithDER:(OFDataArray *)der password:(OFString *)password isPublic:(bool)flag
 {
-	return [[[self alloc] initWithPEM:PEMString password:password isPublic:flag] autorelease];
-}
-
-+ (instancetype)keyWithDER:(OFDataArray *)DERData password:(OFString *)password isPublic:(bool)flag
-{
-	return [[[self alloc] initWithDER:DERData password:password isPublic:flag] autorelease];
-}
-
-+ (instancetype)keyWithStruct:(mbedtls_pk_context *)context isPublic:(bool)flag
-{
-	return [[[self alloc] initWithStruct:context isPublic:flag] autorelease];
+	return [[[self alloc] initWithDER:der password:password isPublic:flag] autorelease];
 }
 
 + (instancetype)key
