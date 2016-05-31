@@ -586,48 +586,6 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	_parsed = true;
 }
 
-- (void)parseFile:(OFString *)file
-{
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
-	OFDataArray* data = [OFDataArray dataArrayWithContentsOfFile:file];
-	
-	if ([data count] == 0 || [data lastItem] == NULL) {
-		[pool release];
-		@throw [OFInvalidArgumentException exception];
-	}
-
-	if (strstr( (const char *)[data items], "-----BEGIN CERTIFICATE-----" ) != NULL) {
-		
-		@try {
-			[self parsePEM:[OFString stringWithUTF8String:(const char *)[data items] length:(size_t)[data count]]];
-
-		}@catch(id e) {
-			[pool release];
-
-			@throw e;
-		}
-
-		[pool release];
-
-		return;
-	}
-	
-	@try {
-		[self parseDER:data];
-
-	} @catch(id e) {
-		[pool release];
-
-		@throw e;
-	}
-
-	[pool release];
-
-	return;
-
-}
-
 - (bool)hasCommonNameMatchingDomain: (OFString*)domain
 {
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
@@ -817,7 +775,20 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 - (MBEDPKey *)PK
 {
 	if (_PK == nil) {
-		_PK = [[MBEDPKey alloc] initWithStruct:&( self.context->pk) isPublic:true];
+		int size = 0;
+		unsigned char buf[PUB_DER_MAX_BYTES] = {0};
+		OFDataArray* bytes;
+
+		if ((size = mbedtls_pk_write_pubkey_der(&(self.context->pk), buf, PUB_DER_MAX_BYTES)) <= 0)
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:size];
+
+		bytes = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
+		[bytes addItems:(buf + sizeof(buf) - size) count:size];
+
+
+		_PK = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:true];
+
+		[bytes release];
 	}
 
 	return _PK;
@@ -921,7 +892,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 				if (exc.errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT)
 					continue;
 
-				last_exception = [exc retain];
+				last_exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:exc.errNo];
 
 				@throw;
 

@@ -171,54 +171,6 @@ OFString *const kRCRevocationDate = @"kRCRevocationDate";
 	return self;
 }
 
-- (void)parseFile:(OFString *)file
-{
-	OFFileManager* filemanager = [OFFileManager defaultManager];
-
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
-	if (![filemanager fileExistsAtPath:file]) {
-
-		[pool release];
-
-		@throw [OFInvalidArgumentException exception];
-	}
-
-	OFDataArray* data = [OFDataArray dataArrayWithContentsOfFile:file];
-
-	if ([data count] == 0 || [data lastItem] == NULL) {
-		[pool release];
-		@throw [OFInvalidArgumentException exception];
-	}
-
-	if (strstr( (const char *)[data items], "-----BEGIN X509 CRL-----" ) != NULL) {
-		@try {
-			[self parsePEM:[OFString stringWithUTF8String:(const char *)[data items] length:(size_t)[data count]]];
-
-		}@catch(id e) {
-			[pool release];
-
-			@throw e;
-		}
-
-		[pool release];
-
-		return;
-	}
-
-	@try {
-		[self parseDER:data];
-
-	} @catch(id e) {
-
-		[pool release];
-
-		@throw e;
-	}
-
-	[pool release];
-}
-
 - (OFDictionary *)CRL_dictionaryFromX509Name:(OFString *)name
 {
 
@@ -667,10 +619,9 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		];
 
 	bool parsed = false;
+	id last_exception = nil;
 
 	@try {
-
-		id last_exception = nil;
 
 		for (OFString* token in tokens) {
 
@@ -684,7 +635,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 				if (exc.errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT)
 					continue;
 
-				last_exception = [exc retain];
+				last_exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:exc.errNo];
 
 				@throw;
 
