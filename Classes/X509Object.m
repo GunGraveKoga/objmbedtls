@@ -22,14 +22,14 @@
 
 - (void)parseFile:(OFString *)fileName
 {
-	OF_UNRECOGNIZED_SELECTOR
+	[self parseFile:fileName password:nil];
 }
 
 - (void)parseFilesAtPath:(OFString *)path
 {
-	OFFileManager* fmgr = [OFFileManager defaultManager];
+	id exception = nil;
 
-	
+	OFFileManager* fmgr = [OFFileManager defaultManager];
 
 	if ([fmgr directoryExistsAtPath:path]) {
 
@@ -37,7 +37,7 @@
 
 		@try {
 
-			if ([[fmgr contentsOfDirectoryAtPath:path] count] <= 3) {
+			if ([[fmgr contentsOfDirectoryAtPath:path] count] <= 2) {
 
 				[pool release];
 
@@ -55,10 +55,13 @@
 			}
 
 		} @catch(OFException* e) {
-			[e retain];
-			[pool release];
+			exception = [e retain];
 
-			@throw [e autorelease];
+			@throw;
+
+		} @finally {
+			[pool release];
+			[exception autorelease];
 		}
 
 		return;
@@ -70,6 +73,8 @@
 
 - (void)parsePEMorDER:(OFDataArray *)data header:(OFString *)header footer:(OFString *)footer password:(_Nullable OFString *)password
 {
+	id exception = nil;
+
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
 	@try {
@@ -103,22 +108,30 @@
 			}
 
 		} else {
-			@throw [MBEDTLSException exceptionWithObject:nil errorNumber:MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT];
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT];
 		}
 
 
 	} @catch (id e) {
-		[e retain];
+		exception = [e retain];
+
+		@throw;
+
+	}@finally {
 		[pool release];
-
-		@throw [e autorelease];
+		[exception autorelease];
 	}
-
-	[pool release];
 }
 
 - (void)parsePEM:(OFString *)pem
 {
+	[self parsePEM:pem password:nil];
+}
+
+- (void)parsePEM:(OFString *)pem password:(OFString *)password
+{
+	id exception = nil;
+
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
 	
 	OFDataArray* data = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
@@ -127,23 +140,49 @@
 
 	@try {
 
-		[self parsePEMorDER:data password:nil];
+		[self parsePEMorDER:data password:password];
 
 	} @catch (id e) {
 
-		[e retain];
+		exception = [e retain];
+
+		@throw;
+
+	}@finally{
 		[pool release];
 
-		@throw e;
-
+		if (exception != nil)
+			[exception autorelease];
 	}
 
-	[pool release];
 }
 
 - (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
 {
 	OF_UNRECOGNIZED_SELECTOR
+}
+
+- (void)parseFile:(OFString *)fileName password:(OFString*)password
+{
+	id exception = nil;
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	@try {
+
+		OFDataArray* data = [OFDataArray dataArrayWithContentsOfFile:fileName];
+
+		[self parsePEMorDER:data password:password];
+
+	}@catch(id e) {
+		exception = [e retain];
+		@throw;
+
+	}@finally {
+		[pool release];
+		[exception autorelease];
+
+	}
 }
 
 @end

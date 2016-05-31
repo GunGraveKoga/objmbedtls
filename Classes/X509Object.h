@@ -15,11 +15,15 @@
 
 - (void)parsePEM:(OFString *)pem;
 
+- (void)parsePEM:(OFString *)pem password:(OFString *)password;
+
 - (void)parseDER:(OFDataArray *)der;
 
 - (void)parseDER:(OFDataArray *)der password:(OFString *)password;
 
 - (void)parseFile:(OFString *)fileName;
+
+- (void)parseFile:(OFString *)fileName password:(OFString*)password;
 
 - (void)parseFilesAtPath:(OFString *)path;
 
@@ -46,7 +50,6 @@
 *
 *- (void)parseDER:(OFDataArray *)der
 *- (void)parseDER:(OFDataArray *)der password:(OFString *)password (for encrypted DER data)
-*- (void)parseFile:(OFString *)fileName
 *- (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
 *
 *
