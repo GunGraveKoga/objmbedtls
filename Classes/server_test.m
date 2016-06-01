@@ -132,6 +132,21 @@ OF_APPLICATION_DELEGATE(Test)
 
  	of_log(@"Key from PEM %@", key);
 
+ 	OFDataArray* keyder = key.DER;
+
+ 	[keyder writeToFile:@"exmpl.der"];
+
+ 	OFString* testhash = @"HiHi";
+
+ 	OFDataArray* sign = [key makeSignatureForHash:[[testhash SHA256Hash] UTF8String] hashType:MBEDTLS_MD_SHA256];
+
+ 	of_log(@"Sign: %@", sign);
+
+ 	[sign writeToFile:@"test.sig"];
+
+ 	if ([key verifySignature:sign ofHash:[[testhash SHA256Hash] UTF8String] hashType:MBEDTLS_MD_SHA256])
+ 		of_log(@"Valid!");
+
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
 	OFString* srv_crt = [OFString stringWithUTF8String:(const char *)mbedtls_test_srv_crt length:(size_t)mbedtls_test_srv_crt_len];
