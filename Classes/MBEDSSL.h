@@ -3,8 +3,6 @@
 
 #import "macros.h"
 
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509_crt.h>
 
@@ -12,6 +10,7 @@
 @class MBEDX509Certificate;
 @class MBEDCRL;
 @class MBEDPKey;
+@class MBEDEntropy;
 
 OBJMBEDTLS_EXPORT const mbedtls_x509_crt_profile kDefaultProfile;
 
@@ -27,8 +26,7 @@ typedef enum {
 
 @interface MBEDSSL: OFObject
 {
-	mbedtls_entropy_context _entropy;
-    mbedtls_ctr_drbg_context _ctr_drbg;
+	MBEDEntropy* _entropy;
     mbedtls_ssl_context _ssl;
     mbedtls_ssl_config _conf;
     bool _configured;
@@ -37,8 +35,7 @@ typedef enum {
 
 @property(assign, readonly)mbedtls_ssl_context* context;
 @property(assign, readonly)mbedtls_ssl_config* config;
-@property(assign, readonly)mbedtls_ctr_drbg_context* ctr_drbg;
-@property(assign, readonly)mbedtls_entropy_context* entropy;
+@property(assign, readonly)MBEDEntropy* entropy;
 @property(copy, readonly)OFString* cipherSuite;
 
 + (instancetype)ssl;

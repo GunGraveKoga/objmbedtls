@@ -5,6 +5,8 @@
 #import "MBEDPKey.h"
 #import "MBEDCRL.h"
 #import "MBEDTLSException.h"
+#import "MBEDInitializationFailedException.h"
+#import "MBEDEntropy.h"
 
 #include <mbedtls/error.h>
 
@@ -24,38 +26,54 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 @interface MBEDSSL()
 @property(copy, readwrite)OFString* cipherSuite;
+@property(assign, readwrite)MBEDEntropy* entropy;
 @end
 
 @implementation MBEDSSL
 
 @dynamic context;
 @dynamic config;
-@dynamic ctr_drbg;
-@dynamic entropy;
 @synthesize cipherSuite = _cipherSuite;
+@synthesize entropy = _entropy;
 
 - (instancetype)init
 {
 	self = [super init];
 
+	void* pool = objc_autoreleasePoolPush();
+
 	_configured = false;
 	_cipherSuite = nil;
 
-	mbedtls_ctr_drbg_init( self.ctr_drbg );
 	mbedtls_ssl_init( self.context );
 	mbedtls_ssl_config_init( self.config );
-	mbedtls_entropy_init( self.entropy );
 
-	void* pool = objc_autoreleasePoolPush();
+	bool random_generated = false;
+	int lasterror = 0;
+	
+	@try {
+		self.entropy = [MBEDEntropy defaultEntropy];
 
-	OFString* pers = [self className];
-	pers = [pers stringByAppendingFormat:@"%p", self];
-	if (mbedtls_ctr_drbg_seed(self.ctr_drbg, mbedtls_entropy_func, self.entropy, (const unsigned char *)[pers UTF8String], [pers UTF8StringLength]) != 0) {
+		random_generated = true;
+
+	} @catch(id e) {
+
+		if ([e isKindOfClass:[MBEDTLSException class]])
+			lasterror = ((MBEDTLSException *)e).errNo;
+
+	}@finally {
+
 		objc_autoreleasePoolPop(pool);
+	}
+
+	if (!random_generated) {
 		[self release];
+
+		if (lasterror != 0)
+			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDSSL class] errorNumber:lasterror];
+
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSL class]];
 	}
-	objc_autoreleasePoolPop(pool);
 
 	return self;
 }
@@ -64,8 +82,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 {
 	mbedtls_ssl_free( self.context );
     mbedtls_ssl_config_free( self.config );
-	mbedtls_ctr_drbg_free( self.ctr_drbg );
-	mbedtls_entropy_free( self.entropy );
+	self.entropy = nil;
 	[super dealloc];
 }
 
@@ -84,16 +101,6 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	return &_conf;
 }
 
-- (mbedtls_ctr_drbg_context *)ctr_drbg
-{
-	return &_ctr_drbg;
-}
-
-- (mbedtls_entropy_context *)entropy
-{
-	return &_entropy;
-}
-
 - (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode
 {
 	int ret = 0;
@@ -107,7 +114,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	}
 
 	mbedtls_ssl_conf_authmode(self.config, mode);
-	mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg);
+	mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.entropy.ctr_drbg);
 	mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
 
 	_configured = true;
@@ -174,7 +181,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	MBEDSSLSocket* sslSocket = (MBEDSSLSocket *)socket;
 
 	//mbedtls_ssl_conf_authmode(self.config, MBEDTLS_SSL_VERIFY_OPTIONAL);
-	//mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg);
+	//mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.entropy.ctr_drbg);
   	mbedtls_ssl_set_bio(self.context, sslSocket.context, mbedtls_net_send, mbedtls_net_recv, NULL);
   	//mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
 

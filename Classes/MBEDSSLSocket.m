@@ -51,13 +51,6 @@
 	of_tls_socket_class = self;
 }
 
-+ (void)initialize
-{
-	if (self == [MBEDSSLSocket class]) {
-		mbedtls_threading_set_alt(objfw_mbedtls_mutex_init, objfw_mbedtls_mutex_free, objfw_mbedtls_mutex_lock, objfw_mbedtls_mutex_unlock);
-	}
-}
-
 - (instancetype)init
 {
 	self = [super init];
