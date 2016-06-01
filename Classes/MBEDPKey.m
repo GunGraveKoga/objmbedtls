@@ -3,6 +3,7 @@
 #import "PEM.h"
 #import "MBEDTLSException.h"
 #import "MBEDInitializationFailedException.h"
+#import "MBEDEntropy.h"
 
 #if !defined(MBEDTLS_CONFIG_FILE)
 #include "mbedtls/config.h"
@@ -13,6 +14,7 @@
 #if defined(MBEDTLS_PK_PARSE_C)
 
 #include "mbedtls/pk.h"
+#include "mbedtls/pk_internal.h"
 #include "mbedtls/asn1.h"
 #include "mbedtls/oid.h"
 
@@ -50,9 +52,11 @@
 #define mbedtls_free       free
 #endif
 
+
 @interface MBEDPKey()
 
 @property(assign, readwrite)mbedtls_pk_type_t type;
+@property(assign, readwrite)MBEDEntropy* entropy;
 @property(assign, readwrite)bool isPublic;
 - (OFDataArray *)PKEY_publicKeyDER;
 - (OFDataArray *)PKEY_privateKeyDER;
@@ -64,16 +68,52 @@
 
 @synthesize type = _type;
 @synthesize isPublic = _isPublic;
+@synthesize entropy = _entropy;
 @dynamic context;
 @dynamic name;
+@dynamic bitlen;
 
 - (instancetype)init
 {
 	self = [super init];
 
+	void* pool = objc_autoreleasePoolPush();
+	
 	mbedtls_pk_init(self.context);
+
 	self.type = MBEDTLS_PK_NONE;
 	self.isPublic = false;
+	_bitlen = 0;
+
+	bool random_generated = false;
+	int lasterror = 0;
+
+	@try {
+		
+		self.entropy = [MBEDEntropy defaultEntropy];
+
+		random_generated = true;
+
+	}@catch (id e) {
+		of_log(@"%@", e);
+
+		if ([e isKindOfClass:[MBEDTLSException class]])
+			lasterror = ((MBEDTLSException *)e).errNo;
+
+	} @finally {
+		objc_autoreleasePoolPop(pool);
+
+	}
+
+	if (!random_generated) {
+		[self release];
+
+		if (lasterror != 0)
+			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDPKey class] errorNumber:lasterror];
+
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDPKey class]];
+	}
+
 
 	return self;
 }
@@ -81,6 +121,7 @@
 - (void)dealloc
 {
 	mbedtls_pk_free(self.context);
+	self.entropy = nil;
 	[_name release];
 	[super dealloc];
 }
@@ -160,6 +201,11 @@
 - (mbedtls_pk_context *)context
 {
 	return &_context;
+}
+
+- (size_t)bitlen
+{
+	return mbedtls_pk_get_bitlen(self.context);
 }
 
 
@@ -468,7 +514,7 @@
 {
 	OFMutableString* desc = [OFMutableString string];
 
-	[desc appendFormat:@"%@", self.name];
+	[desc appendFormat:@"%zu bit %@", self.bitlen, self.name];
 
 	if (self.isPublic)
 		[desc appendString:[OFString stringWithUTF8String:" Public"]];
@@ -480,6 +526,47 @@
 	[desc makeImmutable];
 
 	return desc;
+}
+
+- (OFDataArray *)makeSignatureForHash:(const uint8_t *)hash hashType:(mbedtls_md_type_t)algorithm
+{
+	unsigned char buf[MBEDTLS_MPI_MAX_SIZE];
+    int ret = 0;
+    size_t olen = 0;
+
+   if (self.context->pk_info == NULL)
+   	@throw [OFInvalidArgumentException exception];
+
+
+    if ((ret =  mbedtls_pk_sign(self.context, algorithm, hash, 0, buf, &olen, mbedtls_ctr_drbg_random, self.entropy.ctr_drbg)) != 0)
+    	@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+
+    OFDataArray* sign = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
+    [sign addItems:buf count:olen];
+
+    return sign;
+}
+
+- (bool)verifySignature:(OFDataArray *)signature ofHash:(const uint8_t *)hash hashType:(mbedtls_md_type_t)algorithm
+{
+	int ret = 0;
+
+	if ((ret = mbedtls_pk_verify(self.context, algorithm, hash, 0, [signature items], [signature count])) != 0) {
+		if (ret == MBEDTLS_ERR_PK_SIG_LEN_MISMATCH)
+			return false;
+
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+	}
+
+	return true;
+}
+
++ (bool)publicKey:(MBEDPKey *)pub matchesPrivateKey:(MBEDPKey *)prv
+{
+	if (mbedtls_pk_check_pair(pub.context, prv.context) == 0)
+		return true;
+
+	return false;
 }
 
 @end
