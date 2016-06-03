@@ -48,6 +48,8 @@ OF_APPLICATION_DELEGATE(Test)
 		connected = false;
 	}
 	if (connected) {
+		of_log(@"Key: %@", socket.peerCertificate);
+		of_log(@"Key: %@", socket.peerCertificate.PK);
 		[socket writeLine:@"GET / HTTP/1.0\r\n"];
 
 		while (!socket.isAtEndOfStream) {

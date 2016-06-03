@@ -17,6 +17,7 @@
 #include "mbedtls/pk_internal.h"
 #include "mbedtls/asn1.h"
 #include "mbedtls/oid.h"
+#include "mbedtls/bignum.h"
 
 #if defined(MBEDTLS_RSA_C)
 #include "mbedtls/rsa.h"
@@ -287,14 +288,12 @@
 	int ret = 0;
 
 	if (self.isPublic) {
-		unsigned char *p;
 
-		p = (unsigned char *)[der items];
+		unsigned char* p = [der items];
 
-		if ((ret = mbedtls_pk_parse_subpubkey(&p, [der lastItem], self.context)) != 0) {
-			mbedtls_pk_free(self.context);
-
+		if ((ret =  mbedtls_pk_parse_subpubkey(&p, p + [der count], self.context)) != 0) {
 			@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+
 		}
 
 		return;
@@ -466,13 +465,13 @@
 		[self release];
 		exception = [[MBEDInitializationFailedException alloc] initWithClass:[MBEDPKey class] errorNumber:exc.errNo];
 
-		@throw;
+		@throw exception;
 
 	}@catch(id e) {
 		[self release];
 		exception = [[OFInitializationFailedException alloc] initWithClass:[MBEDPKey class]];
 
-		@throw;
+		@throw exception;
 
 	}@finally {
 		[pool release];
@@ -551,14 +550,36 @@
 {
 	int ret = 0;
 
-	if ((ret = mbedtls_pk_verify(self.context, algorithm, hash, 0, [signature items], [signature count])) != 0) {
-		if (ret == MBEDTLS_ERR_PK_SIG_LEN_MISMATCH)
-			return false;
-
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-	}
+	if ((ret = mbedtls_pk_verify(self.context, algorithm, hash, 0, [signature items], [signature count])) != 0)
+		return false;
 
 	return true;
+}
+
+- (MBEDPKey *)publicKey
+{
+	if (self.isPublic)
+		@throw [OFNotImplementedException exceptionWithSelector:@selector(publicKey) object:self];
+
+	unsigned char der[PUB_DER_MAX_BYTES];
+	OFDataArray* bytes;
+	int ret = 0;
+	MBEDPKey* pub;
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+	if ((ret = mbedtls_pk_write_pubkey_der(self.context, der, sizeof(der))) <= 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+
+	bytes = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
+
+	[bytes addItems:(der + sizeof(der) - ret) count:ret];
+
+	pub = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:nil];
+
+	[pool release];
+
+	return [pub autorelease];
 }
 
 + (bool)publicKey:(MBEDPKey *)pub matchesPrivateKey:(MBEDPKey *)prv

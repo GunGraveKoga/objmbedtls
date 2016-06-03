@@ -35,6 +35,7 @@
 
 - (OFDataArray *)makeSignatureForHash:(const uint8_t *)hash hashType:(mbedtls_md_type_t)algorithm;
 - (bool)verifySignature:(OFDataArray *)signature ofHash:(const uint8_t *)hash hashType:(mbedtls_md_type_t)algorithm;
+- (MBEDPKey *)publicKey;
 
 + (instancetype)keyWithPublicKeyFile:(OFString *)file;
 + (instancetype)keyWithPrivateKeyFile:(OFString *)file password:(OFString *)password;

@@ -31,7 +31,7 @@
 
 - (instancetype)initWithObject:(id)object errorNumber:(int)errNo
 {
-	self = [super init];
+	self = [self init];
 
 	self.sourceObject = object;
 	self.errNo = errNo;

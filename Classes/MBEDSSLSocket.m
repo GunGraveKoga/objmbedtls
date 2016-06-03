@@ -503,8 +503,18 @@
 			return nil;
 		}
 
-		_peerCertificate = [[MBEDX509Certificate alloc] initWithX509Struct:peerCrt];
+		OFAutoreleasePool* pool = [OFAutoreleasePool new];
+
+		OFDataArray* bytes = [OFDataArray dataArrayWithItemSize:sizeof(char)];
+
+		[bytes addItems: peerCrt->raw.p count: peerCrt->raw.len];
+
+		_peerCertificate = [[MBEDX509Certificate alloc] initWithDER:bytes];
+
+		[pool release];
+
 	}
+
 	return _peerCertificate;
 }
 

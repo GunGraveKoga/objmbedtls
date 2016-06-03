@@ -637,7 +637,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 				last_exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:exc.errNo];
 
-				@throw;
+				@throw last_exception;
 
 			} @catch(OFException* e) {
 

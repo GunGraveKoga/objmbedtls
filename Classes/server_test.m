@@ -119,6 +119,7 @@ OF_APPLICATION_DELEGATE(Test)
  	cert = [MBEDX509Certificate certificateWithFile:@"./test.pem"];
  	of_log(@"File %@", cert);
 
+
  	crl = [MBEDCRL crlWithFile:@"./crl.pem"];
  	of_log(@"File %@", crl);
  	crlpem = [OFString stringWithContentsOfFile:@"./crl.pem"];
@@ -146,6 +147,13 @@ OF_APPLICATION_DELEGATE(Test)
 
  	if ([key verifySignature:sign ofHash:[[testhash SHA256Hash] UTF8String] hashType:MBEDTLS_MD_SHA256])
  		of_log(@"Valid!");
+
+ 	MBEDPKey* prv = [MBEDPKey keyWithPublicKeyFile:@"./rsa4096_pub.pem"];
+ 	of_log(@"%@", prv);
+ 	MBEDPKey* pub = [MBEDPKey keyWithPEM:[prv PEM] password:nil isPublic:true];
+ 	of_log(@"%@", pub);
+ 	of_log(@"%@", prv.DER);
+ 	of_log(@"%@", pub.DER);
 
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
