@@ -784,9 +784,6 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 		bytes = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
 		[bytes addItems:(buf + (sizeof(buf) - size)) count:size];
-		of_log(@"%@", bytes);
-		for (size_t i = 0; i < sizeof(buf); i++)
-			printf("%x ", buf[i]);
 
 		_PK = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:true];
 
