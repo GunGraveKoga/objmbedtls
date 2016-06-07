@@ -61,6 +61,8 @@
 @property(assign, readwrite)bool isPublic;
 - (OFDataArray *)PKEY_publicKeyDER;
 - (OFDataArray *)PKEY_privateKeyDER;
+- (void)PKEY_parsePublicKeyDER:(OFDataArray *)pub;
+- (void)PKEY_parsePrivateKeyDER:(OFDataArray *)prv password:(OFString *)password;
 
 @end
 
@@ -283,35 +285,62 @@
 	return [bytes autorelease];
 }
 
-- (void)parseDER:(OFDataArray *)der
+- (void)PKEY_parsePublicKeyDER:(OFDataArray *)pub
 {
 	int ret = 0;
 
-	if (self.isPublic) {
+	unsigned char* p = [pub items];
 
-		unsigned char* p = [der items];
+	if ((ret =  mbedtls_pk_parse_subpubkey(&p, p + [pub count], self.context)) != 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 
-		if ((ret =  mbedtls_pk_parse_subpubkey(&p, p + [der count], self.context)) != 0) {
-			@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+}
 
-		}
+- (void)PKEY_parsePrivateKeyDER:(OFDataArray *)prv password:(OFString *)password
+{
+	int ret = 0;
+	
+	if ((ret = mbedtls_pk_parse_key(self.context, [prv items], [prv count], (const unsigned char *)((password == nil) ? NULL : [password UTF8String]), ((password == nil) ? 0 : [password UTF8StringLength]))) != 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+}
+
+- (void)parseDER:(OFDataArray *)der
+{
+	id exception = nil;
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+	
+	@try {
+		[self PKEY_parsePublicKeyDER:der];
+		self.isPublic = true;
 
 		return;
 
-	} else {
-		[self parseDER:der password:nil];
+	} @catch (MBEDTLSException* exc) {
+		self.isPublic = false;
+		mbedtls_pk_free(self.context);
+
+	}@catch (id e) {
+		exception = [e retain];
+		@throw;
+
+	}@finally {
+		[pool release];
+
+		if (exception != nil)
+			[exception autorelease];
 	}
+
+	[self PKEY_parsePrivateKeyDER:der password:nil];
+
+
 }
 
 - (void)parseDER:(OFDataArray *)der password:(OFString *)password
 {
-	if (self.isPublic)
-		@throw [OFInvalidArgumentException exception];
+	self.isPublic = false;
 
-	int ret = 0;
-	
-	if ((ret = mbedtls_pk_parse_key(self.context, [der items], [der count], (const unsigned char *)((password == nil) ? NULL : [password UTF8String]), ((password == nil) ? 0 : [password UTF8StringLength]))) != 0)
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+	[self PKEY_parsePrivateKeyDER:der password:password];
 }
 
 - (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
@@ -456,7 +485,6 @@
 
 		if (flag) {
 			[self parseDER:der];
-			self.isPublic = flag;
 		}
 		else
 			[self parseDER:der password:password];
@@ -575,7 +603,7 @@
 
 	[bytes addItems:(der + sizeof(der) - ret) count:ret];
 
-	pub = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:nil];
+	pub = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:true];
 
 	[pool release];
 
