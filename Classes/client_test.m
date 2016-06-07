@@ -4,6 +4,7 @@
 #import "MBEDX509Certificate.h"
 #import "MBEDPKey.h"
 #import "MBEDSSL.h"
+#import "WinBacktrace.h"
 
 
 @interface Test: OFObject<OFApplicationDelegate>
@@ -19,6 +20,8 @@ OF_APPLICATION_DELEGATE(Test)
 
 - (void)applicationDidFinishLaunching
 {
+	WinBacktrace* plugin = [OFPlugin pluginFromFile:@"WinBacktrace"];
+
 	of_log(@"Verefy exception:\n\n");
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
 	bool connected = true;
@@ -36,6 +39,8 @@ OF_APPLICATION_DELEGATE(Test)
 			OFString* l = [socket readLine];
 			of_log(@"%@", l);
 		}
+
+		[socket close];
 	}
 
 	connected = true;
@@ -50,6 +55,9 @@ OF_APPLICATION_DELEGATE(Test)
 	if (connected) {
 		of_log(@"Key: %@", socket.peerCertificate);
 		of_log(@"Key: %@", socket.peerCertificate.PK);
+		of_log(@"DER: %@", socket.peerCertificate.PK.DER);
+		of_log(@"PEM: \n%@", socket.peerCertificate.PK.PEM);
+		of_log(@"Next %@", [socket.peerCertificate next]);
 		[socket writeLine:@"GET / HTTP/1.0\r\n"];
 
 		while (!socket.isAtEndOfStream) {
@@ -67,7 +75,8 @@ OF_APPLICATION_DELEGATE(Test)
 	@try {
 		[socket connectToHost:@"google.com" port:443]; //exception not expected
 	}@catch(id e) {
-		of_log(@"Not expected exception - %@", e);
+		of_log(@"Not expected exception - %@", e);	
+		[e printDebugBacktrace];
 		connected = false;
 	}
 	if (connected) {

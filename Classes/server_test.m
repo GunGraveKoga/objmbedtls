@@ -148,12 +148,12 @@ OF_APPLICATION_DELEGATE(Test)
  	if ([key verifySignature:sign ofHash:[[testhash SHA256Hash] UTF8String] hashType:MBEDTLS_MD_SHA256])
  		of_log(@"Valid!");
 
- 	MBEDPKey* prv = [MBEDPKey keyWithPublicKeyFile:@"./rsa4096_pub.pem"];
- 	of_log(@"%@", prv);
- 	MBEDPKey* pub = [MBEDPKey keyWithPEM:[prv PEM] password:nil isPublic:true];
- 	of_log(@"%@", pub);
- 	of_log(@"%@", prv.DER);
- 	of_log(@"%@", pub.DER);
+ 	MBEDPKey* pub = [key publicKey];
+
+ 	of_log(@"Pub: %@", pub);
+
+ 	if ([MBEDPKey publicKey:pub matchesPrivateKey:key])
+ 		of_log(@"Pub matches prv");
 
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 
