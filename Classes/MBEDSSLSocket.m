@@ -361,8 +361,10 @@
 		[_SSL notifyPeerToClose];
 		[self reinit_SSL];
 		[super close];
-
+		return;
 	}
+
+	[self reinit_SSL];
 
 }
 
