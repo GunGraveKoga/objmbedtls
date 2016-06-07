@@ -504,7 +504,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	else {
 		objc_autoreleasePoolPop(pool);
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
 	}
 
 	memset(buf, 0, bufSize);
@@ -527,7 +527,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	else {
 		objc_autoreleasePoolPop(pool);
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
 	}
 	if ( self.context->ext_types & MBEDTLS_X509_EXT_SUBJECT_ALT_NAME)
 		self.subjectAlternativeNames = [self X509_dictionaryFromX509AltNames:objmbedtls_x509_info_subject_alt_name(&( self.context->subject_alt_names))];
@@ -543,7 +543,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	else {
 		objc_autoreleasePoolPop(pool);
 		[self release];
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDX509Certificate class]];
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
 	}
 
 	OFString* dtFormat = [OFString stringWithUTF8String:"%Y-%m-%d %H:%M:%S"];
@@ -950,6 +950,9 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 - (OFString*)description
 {
 	OFMutableString *ret = [OFMutableString string];
+
+	void* pool = objc_autoreleasePoolPush();
+
 	[ret appendUTF8String:"X509 CRT\n"];
 	[ret appendFormat: @"Version: v%d\n\n", self.version];
 	if (self.type != nil)
@@ -958,18 +961,18 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	[ret appendFormat: @"Serial Number: %@\n\n", self.serialNumber];
 	bool firstValue = true;
 	bool firstKey = true;
-	[ret appendString:[OFString stringWithUTF8String:"Issuer: "]];
+	[ret appendUTF8String:"Issuer: "];
 
 	for (OFString* key in [self.issuer allKeys]) {
 		firstValue = true;
 
 		if (!firstKey)
-			[ret appendString:[OFString stringWithUTF8String:", "]];
+			[ret appendUTF8String:", "];
 
 		@autoreleasepool {
 			for (OFString* value in [self.issuer objectForKey:key]) {
 				if (!firstValue)
-					[ret appendString:[OFString stringWithUTF8String:", "]];
+					[ret appendUTF8String:", "];
 
 				[ret appendFormat:@"%@=%@", key, value];
 
@@ -981,19 +984,19 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		if (firstKey)
 			firstKey = false;
 	}
-	[ret appendString:[OFString stringWithUTF8String:"\n\n"]];
-	[ret appendString:[OFString stringWithUTF8String:"Subject: "]];
+	[ret appendUTF8String:"\n\n"];
+	[ret appendUTF8String:"Subject: "];
 	firstKey = true;
 	for (OFString* key in [self.subject allKeys]) {
 		firstValue = true;
 
 		if (!firstKey)
-			[ret appendString:[OFString stringWithUTF8String:", "]];
+			[ret appendUTF8String:", "];
 
 		@autoreleasepool {
 			for (OFString* value in [self.subject objectForKey:key]) {
 				if (!firstValue)
-					[ret appendString:[OFString stringWithUTF8String:", "]];
+					[ret appendUTF8String:", "];
 
 				[ret appendFormat:@"%@=%@", key, value];
 
@@ -1005,14 +1008,14 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		if (firstKey)
 			firstKey = false;
 	}
-	[ret appendString:[OFString stringWithUTF8String:"\n\n"]];
-	[ret appendString:[OFString stringWithUTF8String:"SANs: "]];
+	[ret appendUTF8String:"\n\n"];
+	[ret appendUTF8String:"SANs: "];
 	for (OFString* key in [self.subjectAlternativeNames allKeys]) {
 		firstValue = true;
 		@autoreleasepool {
 			for (OFString* value in [self.subjectAlternativeNames objectForKey:key]) {
 				if (!firstValue)
-					[ret appendString:[OFString stringWithUTF8String:", "]];
+					[ret appendUTF8String:", "];
 
 				[ret appendString:value];
 
@@ -1021,7 +1024,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 			}
 		}
 	}
-	[ret appendString:[OFString stringWithUTF8String:"\n\n"]];
+	[ret appendUTF8String:"\n\n"];
 	[ret appendFormat: @"Issued on: %@\n\n", [self.issued localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]];
 	[ret appendFormat: @"Expires on: %@\n\n", [self.expires localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]];
 	[ret appendFormat: @"Signature Algorithm: %@\n\n", self.signatureAlgorithm];
@@ -1036,21 +1039,23 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		[ret appendFormat: @"%s: %d bits", key_size_str, self.keySize];
 	}
 
-	[ret appendString: @"\n\n"];
+	[ret appendUTF8String:"\n\n"];
 
 	[ret appendFormat: @"Basic constraints: %@", (self.isCA ? @"Yes" : @"No")];
 	if (self.maxPathLength > 0)
 		[ret appendFormat: @", max_pathlen=%zu", self.maxPathLength];
 
 	if (self.keyUsage) {
-		[ret appendString: @"\n\n"];
+		[ret appendUTF8String:"\n\n"];
 		[ret appendFormat: @"Key Usage: %@", self.keyUsage];
 	}
 
 	if (self.extendedKeyUsage) {
-		[ret appendString: @"\n\n"];
+		[ret appendUTF8String:"\n\n"];
 		[ret appendFormat: @"Extended Key Usage: %@", self.extendedKeyUsage];
 	}
+
+	objc_autoreleasePoolPop(pool);
 	
 	[ret makeImmutable];
 	return ret;

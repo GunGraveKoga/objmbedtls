@@ -556,11 +556,11 @@
 	[desc appendFormat:@"%zu bit %@", self.bitlen, self.name];
 
 	if (self.isPublic)
-		[desc appendString:[OFString stringWithUTF8String:" Public"]];
+		[desc appendUTF8String:" Public"];
 	else
-		[desc appendString:[OFString stringWithUTF8String:" Private"]];
+		[desc appendUTF8String:" Private"];
 
-	[desc appendString:[OFString stringWithUTF8String:" Key"]];
+	[desc appendUTF8String:" Key"];
 
 	[desc makeImmutable];
 

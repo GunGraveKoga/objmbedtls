@@ -578,13 +578,13 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		firstValue = true;
 
 		if (!firstKey)
-			[desc appendString:[OFString stringWithUTF8String:", "]];
+			[desc appendUTF8String:", "];
 
 		@autoreleasepool {
 
 			for (OFString* value in [self.issuer objectForKey:key]) {
 				if (!firstValue)
-					[desc appendString:[OFString stringWithUTF8String:", "]];
+					[desc appendUTF8String:", "];
 
 				[desc appendFormat:@"%@=%@", key, value];
 
