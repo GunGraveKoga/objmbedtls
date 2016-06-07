@@ -563,9 +563,9 @@ OFString* DERtoPEM(OFDataArray *der, OFString* header, OFString* footer, size_t 
 	if (line_length == 0)
 		line_length = 64;
 
-	OFMutableString* pem = [[OFMutableString alloc] init];
+	OFMutableString* pem = [OFMutableString string];
 
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+    OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
 	[pem appendFormat:@"%@\n", header];
 
@@ -590,9 +590,9 @@ OFString* DERtoPEM(OFDataArray *der, OFString* header, OFString* footer, size_t 
 
 	[pem appendFormat:@"%@", footer];
 
-	[pool release];
-
 	[pem makeImmutable];
+
+    [pool release];
 
 	return pem;
 }

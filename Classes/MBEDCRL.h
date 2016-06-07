@@ -23,6 +23,8 @@ OBJMBEDTLS_EXPORT OFString *const kRCRevocationDate;
 	OFDate *_nextUpdate;
 	OFArray *_revokedCertificates;
 	OFString *_signatureAlgorithm;
+
+@protected
 	bool _parsed;
 }
 

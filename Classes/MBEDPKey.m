@@ -136,11 +136,10 @@
 
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
-	OFDataArray* DER = [self DER];
-
 	OFString* PEM = nil;
 	OFString* header = nil;
 	OFString* footer = nil;
+	id exception = nil;
 
 	if (self.isPublic) {
 		header = [OFString stringWithUTF8String:"-----BEGIN PUBLIC KEY-----"];
@@ -157,11 +156,24 @@
 
 	}
 
-	PEM = DERtoPEM(DER, header, footer, 0);
+	@try {
+		OFDataArray* DER = [self DER];
+		PEM = DERtoPEM(DER, header, footer, 0);
 
-	[PEM retain];
+	}@catch(id e) {
+		exception = [e retain];
+		@throw;
 
-	[pool release];
+	}@finally {
+		if (PEM != nil)
+			[PEM retain];
+
+		[pool release];
+
+		if (exception != nil)
+			[exception autorelease];
+
+	}
 
 	return [PEM autorelease];
 }

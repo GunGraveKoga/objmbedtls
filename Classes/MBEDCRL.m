@@ -532,13 +532,27 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 - (OFString *)PEM
 {
 	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-	OFDataArray* der = [self DER];
 
-	OFString* pem = DERtoPEM(der, @"-----BEGIN X509 CRL-----", @"-----END X509 CRL-----", 0);
-	
-	[pem retain];
+	id exception = nil;
+	OFString* pem = nil;
 
-	[pool release];
+	@try {
+		OFDataArray* der = [self DER];
+		pem = DERtoPEM(der, @"-----BEGIN X509 CRL-----", @"-----END X509 CRL-----", 0);
+
+	}@catch(id e) {
+		exception = [e retain];
+		@throw;
+
+	}@finally {
+		if (pem != nil)
+			[pem retain];
+
+		[pool release];
+
+		if (exception != nil)
+			[exception autorelease];
+	}
 
 	return [pem autorelease];
 }

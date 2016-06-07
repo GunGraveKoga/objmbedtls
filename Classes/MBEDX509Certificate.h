@@ -42,6 +42,7 @@
 	OFString *_serialNumber;
 	MBEDPKey *_PK;
 
+@protected
 	bool _parsed;
 
 }
