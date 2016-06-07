@@ -208,11 +208,6 @@
 
 }
 
-- (void)parseFilesAtPath:(OFString *)path
-{
-	OF_UNRECOGNIZED_SELECTOR
-}
-
 - (mbedtls_pk_context *)context
 {
 	return &_context;
@@ -628,6 +623,11 @@
 		return true;
 
 	return false;
+}
+
+- (void)parseFilesAtPath:(OFString *)path
+{
+	[self doesNotRecognizeSelector:@selector(parseFilesAtPath:)];
 }
 
 @end
