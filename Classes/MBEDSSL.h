@@ -7,52 +7,30 @@
 #include <mbedtls/x509_crt.h>
 
 @class OFString;
-@class MBEDX509Certificate;
-@class MBEDCRL;
-@class MBEDPKey;
-@class MBEDEntropy;
+@class MBEDSSLConfig;
+@class MBEDSSLSocket;
 
-OBJMBEDTLS_EXPORT const mbedtls_x509_crt_profile kDefaultProfile;
 
-typedef enum {
-	OBJMBED_SSLVERSION_TLSv1 = 0,
-	OBJMBED_SSLVERSION_SSLv3,
-	OBJMBED_SSLVERSION_TLSv1_0,
-	OBJMBED_SSLVERSION_TLSv1_1,
-	OBJMBED_SSLVERSION_TLSv1_2
-
-}objmbed_ssl_version_t;
 
 
 @interface MBEDSSL: OFObject
 {
-	MBEDEntropy* _entropy;
     mbedtls_ssl_context _ssl;
-    mbedtls_ssl_config _conf;
     bool _configured;
     OFString* _cipherSuite;
 }
 
 @property(assign, readonly)mbedtls_ssl_context* context;
-@property(assign, readonly)mbedtls_ssl_config* config;
-@property(assign, readonly)MBEDEntropy* entropy;
 @property(copy, readonly)OFString* cipherSuite;
 
 + (instancetype)ssl;
++ (instancetype)sslWithConfig:(MBEDSSLConfig *)config;
 
-- (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode;
-- (void)setDefaultTCPClientConfig;
-- (void)setDefaultTCPServerConfig;
-- (void)setTCPServerConfigWithClientCertificate;
-- (void)setCertificateProfile:(const mbedtls_x509_crt_profile)profile;
-- (void)setConfigSSLVersion:(objmbed_ssl_version_t)version;
-- (void)configureBIOSocket:(id<OFTLSSocket>)socket;
-- (void)configureCAChainForSocket:(id<OFTLSSocket>)socket;
-- (void)setChainForCA:(MBEDX509Certificate *)ca withCRL:(MBEDCRL *)crl;
-- (void)configureOwnCertificateForSocket:(id<OFTLSSocket>)socket;
-- (void)ownCertificate:(MBEDX509Certificate *)crt privateKey:(MBEDPKey *)pk;
+- (instancetype)initWithConfig:(MBEDSSLConfig *)config;
+
+
+- (void)setBinaryIO:(MBEDSSLSocket *)socket;
 - (void)setHostName:(OFString *)host;
-- (void)configureALPN;
 - (void)handshake;
 - (uint32_t)peerCertificateVerified;
 - (const mbedtls_x509_crt *)peerCertificate;

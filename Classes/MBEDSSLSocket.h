@@ -1,9 +1,8 @@
 #import <ObjFW/OFObject.h>
 #import <ObjFW/OFTCPSocket.h>
 #import <ObjFW/OFTLSSocket.h>
-#import <ObjFW/OFException.h>
-#import "MBEDSSL.h"
 #import "macros.h"
+#import "MBEDSSLConfig.h"
 
 #include <mbedtls/net.h>
 
@@ -11,6 +10,7 @@
 @class MBEDX509Certificate;
 @class MBEDCRL;
 @class MBEDPKey;
+@class MBEDSSL;
 
 @interface MBEDSSLSocket: OFTCPSocket<OFTLSSocket>
 {
@@ -19,6 +19,7 @@
     MBEDPKey* _PK;
     MBEDX509Certificate* _ownCertificate;
     MBEDSSL* _SSL;
+    MBEDSSLConfig* _config;
 
     mbedtls_net_context _context;
 
@@ -42,6 +43,7 @@
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDCRL* CRL;
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDPKey* PK;
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* ownCertificate;
+@property OF_NULLABLE_PROPERTY (retain, readonly)MBEDSSLConfig* config;
 @property OF_NULLABLE_PROPERTY (retain, readonly)MBEDSSL* SSL;
 
 @property (assign, readonly)mbedtls_net_context* context;

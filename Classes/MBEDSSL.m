@@ -1,5 +1,6 @@
 #import <ObjFW/ObjFW.h>
 #import "MBEDSSL.h"
+#import "MBEDSSLConfig.h"
 #import "MBEDSSLSocket.h"
 #import "MBEDX509Certificate.h"
 #import "MBEDPKey.h"
@@ -10,18 +11,7 @@
 
 #include <mbedtls/error.h>
 
-const mbedtls_x509_crt_profile kDefaultProfile = {
-	/* Hashes from SHA-1 and above */
-  	MBEDTLS_X509_ID_FLAG(MBEDTLS_MD_SHA1) |
-  	MBEDTLS_X509_ID_FLAG(MBEDTLS_MD_RIPEMD160) |
-  	MBEDTLS_X509_ID_FLAG(MBEDTLS_MD_SHA224) |
-  	MBEDTLS_X509_ID_FLAG(MBEDTLS_MD_SHA256) |
-  	MBEDTLS_X509_ID_FLAG(MBEDTLS_MD_SHA384) |
-  	MBEDTLS_X509_ID_FLAG(MBEDTLS_MD_SHA512),
-  	0xFFFFFFF, /* Any PK alg    */
-  	0xFFFFFFF, /* Any curve     */
-  	1024,      /* RSA min key len */
-};
+
 
 
 @interface MBEDSSL()
@@ -32,48 +22,14 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 @implementation MBEDSSL
 
 @dynamic context;
-@dynamic config;
 @synthesize cipherSuite = _cipherSuite;
-@synthesize entropy = _entropy;
 
 - (instancetype)init
 {
 	self = [super init];
-
-	void* pool = objc_autoreleasePoolPush();
-
-	_configured = false;
 	_cipherSuite = nil;
 
 	mbedtls_ssl_init( self.context );
-	mbedtls_ssl_config_init( self.config );
-
-	bool random_generated = false;
-	int lasterror = 0;
-	
-	@try {
-		self.entropy = [MBEDEntropy defaultEntropy];
-
-		random_generated = true;
-
-	} @catch(id e) {
-
-		if ([e isKindOfClass:[MBEDTLSException class]])
-			lasterror = ((MBEDTLSException *)e).errNo;
-
-	}@finally {
-
-		objc_autoreleasePoolPop(pool);
-	}
-
-	if (!random_generated) {
-		[self release];
-
-		if (lasterror != 0)
-			@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDSSL class] errorNumber:lasterror];
-
-		@throw [OFInitializationFailedException exceptionWithClass:[MBEDSSL class]];
-	}
 
 	return self;
 }
@@ -81,8 +37,7 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 - (void)dealloc
 {
 	mbedtls_ssl_free( self.context );
-    mbedtls_ssl_config_free( self.config );
-	self.entropy = nil;
+
 	[super dealloc];
 }
 
@@ -91,200 +46,35 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 	return [[[self alloc] init] autorelease];
 }
 
++ (instancetype)sslWithConfig:(MBEDSSLConfig *)config
+{
+	return [[[self alloc] initWithConfig:config] autorelease];
+}
+
+- (instancetype)initWithConfig:(MBEDSSLConfig *)config
+{
+	self = [self init];
+
+	int ret = 0;
+
+	if ((ret = mbedtls_ssl_setup(self.context, config.context)) != 0) {
+		[self release];
+
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDSSL class] errorNumber:ret];
+	}
+
+	return self;
+
+}
+
 - (mbedtls_ssl_context *)context
 {
 	return &_ssl;
 }
 
-- (mbedtls_ssl_config *)config
+- (void)setBinaryIO:(MBEDSSLSocket *)socket
 {
-	return &_conf;
-}
-
-- (void)setDefaultConfigEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode
-{
-	int ret = 0;
-
-	if ( (ret = mbedtls_ssl_setup(self.context, self.config)) != 0) {
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-	}
-
-	if ( (ret = mbedtls_ssl_config_defaults(self.config, endpoint, transport, preset)) != 0) {
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-	}
-
-	mbedtls_ssl_conf_authmode(self.config, mode);
-	mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.entropy.ctr_drbg);
-	mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
-
-	_configured = true;
-}
-
-- (void)setDefaultTCPClientConfig
-{
-	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_CLIENT transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
-}
-
-- (void)setDefaultTCPServerConfig
-{
-	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_NONE];
-}
-
-- (void)setTCPServerConfigWithClientCertificate
-{
-	[self setDefaultConfigEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
-}
-
-- (void)setCertificateProfile:(const mbedtls_x509_crt_profile)profile
-{
-	mbedtls_ssl_conf_cert_profile(self.config, &profile);
-}
-
-- (void)setConfigSSLVersion:(objmbed_ssl_version_t)version
-{
-	if (!_configured)
-		@throw [OFException exception];
-
-	switch (version) {
-		case OBJMBED_SSLVERSION_TLSv1:
-			mbedtls_ssl_conf_min_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-			break;
-		case OBJMBED_SSLVERSION_SSLv3:
-			mbedtls_ssl_conf_min_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_0);
-    		mbedtls_ssl_conf_max_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_0);
-			break;
-		case OBJMBED_SSLVERSION_TLSv1_0:
-			mbedtls_ssl_conf_min_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-    		mbedtls_ssl_conf_max_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_1);
-			break;
-		case OBJMBED_SSLVERSION_TLSv1_1:
-			mbedtls_ssl_conf_min_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_2);
-    		mbedtls_ssl_conf_max_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_2);
-			break;
-		case OBJMBED_SSLVERSION_TLSv1_2:
-			mbedtls_ssl_conf_min_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
-    		mbedtls_ssl_conf_max_version(self.config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
-			break;
-		default:
-			@throw [OFInvalidArgumentException exception];
-	}
-}
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wobjc-method-access"
-
-- (void)configureBIOSocket:(id<OFTLSSocket>)socket
-{
-	if (![socket isKindOfClass:[MBEDSSLSocket class]])
-		@throw [OFInvalidArgumentException exception];
-
-	MBEDSSLSocket* sslSocket = (MBEDSSLSocket *)socket;
-
-	//mbedtls_ssl_conf_authmode(self.config, MBEDTLS_SSL_VERIFY_OPTIONAL);
-	//mbedtls_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.entropy.ctr_drbg);
-  	mbedtls_ssl_set_bio(self.context, sslSocket.context, mbedtls_net_send, mbedtls_net_recv, NULL);
-  	//mbedtls_ssl_conf_ciphersuites(self.config, mbedtls_ssl_list_ciphersuites());
-
-  	//if ( (mbedtls_ssl_set_session(self.context, ssl_session);) != 0) {
-  		//@throw [OFException exception];
-  	//}
-}
-
-- (void)configureCAChainForSocket:(id<OFTLSSocket>)socket
-{
-	if (![socket isKindOfClass:[MBEDSSLSocket class]])
-		@throw [OFInvalidArgumentException exception];
-
-	MBEDSSLSocket* sslSocket = (MBEDSSLSocket *)socket;
-
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
-	@try {
-		if (sslSocket.CA == nil) {
-			sslSocket.CA = [MBEDX509Certificate certificate];
-
-			if (sslSocket.certificateAuthorityFile != nil)
-				[sslSocket.CA parseFile:sslSocket.certificateAuthorityFile];
-
-		}
-
-		//if (sslSocket.CRL == nil) {
-			//sslSocket.CRL = [MBEDCRL crl];
-
-			//if (sslSocket.certificateRevocationListFile != nil)
-				//[sslSocket.CRL parseFile:sslSocket.certificateRevocationListFile];
-		
-		//}
-	}@catch(id e) {
-		[pool release];
-		@throw e;
-	}
-
-	[pool release];
-
-	[self setChainForCA:sslSocket.CA withCRL:sslSocket.CRL];
-}
-
-- (void)setChainForCA:(MBEDX509Certificate *)ca withCRL:(MBEDCRL *)crl
-{
-	mbedtls_ssl_conf_ca_chain(self.config, ca.context, (crl != nil) ? crl.context : NULL);
-}
-
-- (void)configureOwnCertificateForSocket:(id<OFTLSSocket>)socket
-{
-	if (![socket isKindOfClass:[MBEDSSLSocket class]])
-		@throw [OFInvalidArgumentException exception];
-
-	MBEDSSLSocket* sslSocket = (MBEDSSLSocket *)socket;
-
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
-	@try {
-		if (sslSocket.ownCertificate == nil) {
-			sslSocket.ownCertificate = [MBEDX509Certificate certificate];
-
-			if (sslSocket.certificateFile != nil)
-				[sslSocket.ownCertificate parseFile:sslSocket.certificateFile];
-		}
-
-		if (sslSocket.PK == nil) {
-			sslSocket.PK = [MBEDPKey key];
-
-			if (sslSocket.privateKeyFile != nil)
-				[sslSocket.PK parsePrivateKeyFile:sslSocket.privateKeyFile password:[OFString stringWithUTF8String:sslSocket.privateKeyPassphrase]];
-		}
-
-	}@catch(id e) {
-		[pool release];
-		@throw e;
-	}
-
-	[pool release];
-
-	[self ownCertificate:sslSocket.ownCertificate privateKey:sslSocket.PK];
-}
-
-#pragma clang diagnostic pop
-
-- (void)ownCertificate:(MBEDX509Certificate *)crt privateKey:(MBEDPKey *)pk
-{
-	mbedtls_ssl_conf_own_cert(self.config, crt.context, pk.context);
-}
-
-- (void)setHostName:(OFString *)host
-{
-	int ret = 0;
-
-	if ( (ret = mbedtls_ssl_set_hostname(self.context, [host UTF8String])) != 0) {
-		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
-	}
-}
-
-- (void)configureALPN
-{
-	//if ( (mbedtls_ssl_conf_alpn_protocols(self.config, self.protocols[0]) ) != 0) {
-		//@throw [OFException exception];
-	//}
+  	mbedtls_ssl_set_bio(self.context, socket.context, mbedtls_net_send, mbedtls_net_recv, NULL);
 }
 
 - (void)handshake
@@ -336,7 +126,15 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (void)notifyPeerToClose
 {
-	mbedtls_ssl_close_notify(self.context);
+	int ret = 0;
+
+	while ((ret = mbedtls_ssl_close_notify(self.context)) < 0) {
+		if( ret != MBEDTLS_ERR_SSL_WANT_READ &&
+            ret != MBEDTLS_ERR_SSL_WANT_WRITE )
+        {
+        	break;
+        }
+	}
 }
 
 - (void)resetSession
@@ -350,6 +148,14 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 - (size_t)bytesAvailable
 {
 	return mbedtls_ssl_get_bytes_avail(self.context);
+}
+
+- (void)setHostName:(OFString *)host
+{
+	int ret = 0;
+
+	if ( (ret = mbedtls_ssl_set_hostname(self.context, [host UTF8String])) != 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 }
 
 

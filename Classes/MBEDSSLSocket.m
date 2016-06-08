@@ -1,5 +1,6 @@
 #import <ObjFW/ObjFW.h>
 #import "MBEDSSLSocket.h"
+#import "MBEDSSL.h"
 #import "MBEDX509Certificate.h"
 #import "MBEDCRL.h"
 #import "MBEDPKey.h"
@@ -13,10 +14,12 @@
 
 #include <mbedtls/certs.h>
 #include <mbedtls/threading.h>
+#include <assert.h>
 
 
 @interface MBEDSSLSocket()
 
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDSSLConfig* config;
 - (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port asClient:(bool)client;
 - (void)SSL_peerCertificateVerificationWithCA:(bool)flag host:(OFString *)host;
 - (void)reinit_SSL;
@@ -33,6 +36,7 @@
 @synthesize privateKeyPassphrase = _privateKeyPassphrase;
 @synthesize certificateAuthorityFile = _certificateAuthorityFile;
 @synthesize certificateRevocationListFile = _certificateRevocationListFile;
+@synthesize config = _config;
 @dynamic certificateVerificationEnabled;
 @dynamic requestClientCertificatesEnabled;
 @dynamic SSL;
@@ -67,7 +71,10 @@
 	self.CRL = nil;
 	self.PK = nil;
 	self.ownCertificate = nil;
-	_SSL = [MBEDSSL new];
+	self.config = nil;
+
+	_SSL = nil;
+
 	_peerCertificate = nil;
 	_sslVersion = OBJMBED_SSLVERSION_SSLv3;
 	_certificateProfile = kDefaultProfile;
@@ -154,10 +161,10 @@
 
 - (void)dealloc
 {
-	[self close];
-	_delegate = nil;
+	//[self close];
 
-	[_SSL release];
+	_delegate = nil;
+	
 	[_certificateFile release];
 	[_privateKeyFile release];
 	mbedtls_net_free(self.context);
@@ -166,6 +173,8 @@
 	[_PK release];
 	[_ownCertificate release];
 	[_peerCertificate release];
+	[_SSL release];
+	[_config release];
 
 	[super dealloc];
 }
@@ -177,9 +186,6 @@
 
 - (void)setSslVersion:(objmbed_ssl_version_t)version
 {
-	if (self.sslVersion != OBJMBED_SSLVERSION_SSLv3)
-		@throw [OFException exception];
-
 	switch (version) {
 		case OBJMBED_SSLVERSION_TLSv1:
 		case OBJMBED_SSLVERSION_TLSv1_0:
@@ -232,24 +238,63 @@
 
 	self.context->fd = (int)_socket;
 
+	id exception = nil;
+
+	void* pool = objc_autoreleasePoolPush();
+
 	@try {
-		if (client)
-			[_SSL setDefaultTCPClientConfig];
+		if (client){
+			self.config = [MBEDSSLConfig configForTCPClient];
+
+		}
 		else {
 			if (self.isRequestClientCertificatesEnabled)
-				[_SSL setTCPServerConfigWithClientCertificate];
+				self.config = [MBEDSSLConfig configForTCPServerWithClientCertificateRequest];
 			else
-				[_SSL setDefaultTCPServerConfig];
+				self.config = [MBEDSSLConfig configForTCPServer];
 		}
 
-		[_SSL setCertificateProfile:self.certificateProfile];
+		self.config.certificateProfile = self.certificateProfile;
+		self.config.validSSLVersion = self.sslVersion;
 
-		[_SSL setConfigSSLVersion:self.sslVersion];
+		if (self.CA == nil) {
+			if (self.certificateAuthorityFile != nil) {
+				self.CA = [MBEDX509Certificate certificateWithFile:self.certificateAuthorityFile];
+			}
+			else {
+			#if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
+				self.CA = [MBEDX509Certificate certificateWithSystemCA];
+			#else
+				self.CA = [MBEDX509Certificate certificate];
+			#endif
+			}
+		}
 
+		if (self.CRL == nil) {
+			if (self.certificateRevocationListFile != nil) {
+				self.CRL = [MBEDCRL crlWithFile:self.certificateRevocationListFile];
+			}
+			#if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X) 
+			else {
+				self.CRL = [MBEDCRL crlWithSystemCRL];	
+			}
+			#endif
+		}
 
-		[_SSL configureCAChainForSocket:self];
+		if (self.CRL == nil)
+			self.config.certificateAuthorityChain = self.CA;
+		else
+			[self.config setCertificateAuthorityChain:self.CA withCRL:self.CRL];
 
-		[_SSL configureOwnCertificateForSocket:self];
+		if (self.ownCertificate == nil && self.certificateFile != nil)
+			self.ownCertificate = [MBEDX509Certificate certificateWithFile:self.certificateFile];
+
+		if (self.PK == nil && self.privateKeyFile != nil)
+			self.PK = [MBEDPKey keyWithPrivateKeyFile:self.privateKeyFile password:[OFString stringWithUTF8String:self.privateKeyPassphrase]];
+
+		[self.config setOwnCertificate:self.ownCertificate withPrivateKey:self.PK];
+
+		_SSL = [[MBEDSSL alloc] initWithConfig:self.config];
 
 		if (client)
 			[_SSL setHostName:host];
@@ -262,30 +307,52 @@
 			CAChainVerification = true;
 		}
 
-		[_SSL configureBIOSocket:self];
+		[_SSL setBinaryIO:self];
 
 	} @catch(id e) {
-		[super close];
-		[self reinit_SSL];
 		if (client)
+			[super close];
+
+		[self reinit_SSL];
+
+		if (client) {
 			if ([e isKindOfClass:[MBEDTLSException class]])
-				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
+				exception = [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
 			else
-				@throw [SSLConnectionFailedException exceptionWithHost: host port: port socket: self];
-		else
-			@throw e;
+				exception = [SSLConnectionFailedException exceptionWithHost: host port: port socket: self];
+
+			[exception retain];
+
+			of_log(@"%@", e);
+
+			@throw exception;
+		}
+		else {
+			exception = [e retain];
+
+			@throw;
+		}
+
+	}@finally {
+		objc_autoreleasePoolPop(pool);
+
+		if (exception != nil)
+			[exception autorelease];
 	}
 
 	@try {
 		[_SSL handshake];
+
 	}@catch(id e) {
 		
-		[self close];
-		if (client)
+		if (client) {
+			[self close];
+
 			if ([e isKindOfClass:[MBEDTLSException class]])
 				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
 			else
 				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self];
+		}
 		else
 			@throw e;
 	}
@@ -397,7 +464,54 @@
 
 - (instancetype)accept
 {
-	MBEDSSLSocket* client = (MBEDSSLSocket *)[super accept];
+	MBEDSSLSocket *client = [[[[self class] alloc] init] autorelease];
+#if (!defined(HAVE_PACCEPT) && !defined(HAVE_ACCEPT4)) || !defined(SOCK_CLOEXEC)
+# if defined(HAVE_FCNTL) && defined(FD_CLOEXEC)
+	int flags;
+# endif
+#endif
+
+	client->_address = [client
+	    allocMemoryWithSize: sizeof(struct sockaddr_storage)];
+	client->_addressLength = (socklen_t)sizeof(struct sockaddr_storage);
+
+#if defined(HAVE_PACCEPT) && defined(SOCK_CLOEXEC)
+	if ((client->_socket = paccept(_socket, client->_address,
+	   &client->_addressLength, NULL, SOCK_CLOEXEC)) == INVALID_SOCKET)
+		@throw [OFAcceptFailedException
+		    exceptionWithSocket: self
+				  errNo: of_socket_errno()];
+#elif defined(HAVE_ACCEPT4) && defined(SOCK_CLOEXEC)
+	if ((client->_socket = accept4(_socket, client->_address,
+	   &client->_addressLength, SOCK_CLOEXEC)) == INVALID_SOCKET)
+		@throw [OFAcceptFailedException
+		    exceptionWithSocket: self
+				  errNo: of_socket_errno()];
+#else
+	if ((client->_socket = accept(_socket, client->_address,
+	   &client->_addressLength)) == INVALID_SOCKET)
+		@throw [OFAcceptFailedException
+		    exceptionWithSocket: self
+				  errNo: of_socket_errno()];
+
+# if defined(HAVE_FCNTL) && defined(FD_CLOEXEC)
+	if ((flags = fcntl(client->_socket, F_GETFD, 0)) != -1)
+		fcntl(client->_socket, F_SETFD, flags | FD_CLOEXEC);
+# endif
+#endif
+
+	assert(client->_addressLength <=
+	    (socklen_t)sizeof(struct sockaddr_storage));
+
+	if (client->_addressLength != sizeof(struct sockaddr_storage)) {
+		@try {
+			client->_address = [client
+			    resizeMemory: client->_address
+				    size: client->_addressLength];
+		} @catch (OFOutOfMemoryException *e) {
+			/* We don't care, as we only made it smaller */
+		}
+	}
 	
 	client->_isSSLServer = true;
 	client.certificateVerificationEnabled = self.certificateVerificationEnabled;
@@ -415,6 +529,8 @@
 	client.certificateAuthorityFile = self.certificateAuthorityFile;
 	client.certificateRevocationListFile = self.certificateRevocationListFile;
 
+	[client SSL_startTLSWithExpectedHost:nil port:0 asClient:false];
+	/*
 	@try {
 		[client SSL_startTLSWithExpectedHost:nil port:0 asClient:false];
 	}@catch(id e) {
@@ -424,7 +540,7 @@
 			@throw [SSLAcceptFailedException exceptionWithSocket:self errNo:((MBEDTLSException *)e).errNo];
 		else
 			@throw [SSLAcceptFailedException exceptionWithSocket:client errNo:0];
-	}
+	}*/
 
 	return client;
 }

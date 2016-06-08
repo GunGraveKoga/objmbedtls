@@ -172,7 +172,7 @@ OF_APPLICATION_DELEGATE(Test)
 	srv.PK = [MBEDPKey keyWithPEM:[OFString stringWithUTF8String:[srv_key items] length:([srv_key count] * [srv_key itemSize])] password:nil isPublic:false];
 	srv.ownCertificate = [MBEDX509Certificate certificateWithPEM:srv_crt];
 	srv.sslVersion = OBJMBED_SSLVERSION_TLSv1;
-	srv.requestClientCertificatesEnabled = true;
+	//srv.requestClientCertificatesEnabled = true;
 	
 	[srv bindToHost:@"0.0.0.0" port:9999];
 	[srv listen];
@@ -190,7 +190,7 @@ OF_APPLICATION_DELEGATE(Test)
 
 		MBEDSSLSocket* sclient = (MBEDSSLSocket *)acceptedSocket;
 
-		of_log(@"Client certificate:\n\n%@", sclient.peerCertificate);
+		//of_log(@"Client certificate:\n\n%@", sclient.peerCertificate);
 
 		[sclient asyncReadLineWithBlock:^bool(OFStream *stream, OFString *_Nullable line, OFException *_Nullable exception){
 			if (exception) {
@@ -207,6 +207,7 @@ OF_APPLICATION_DELEGATE(Test)
 				if ([line length] == 0) {
 					MBEDSSLSocket* sock = (MBEDSSLSocket *)stream;
 					[sock writeFormat:@"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n<h2>mbed TLS Test Server</h2>\r\n<p>Successful connection using: %@</p>\r\n", sock.SSL.cipherSuite];
+					//[sock close];
 					return false;
 				}
 			}
