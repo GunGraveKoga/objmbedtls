@@ -357,14 +357,12 @@
 
 - (void)close
 {
-	if (_socket != INVALID_SOCKET) {
+	if (_socket != INVALID_SOCKET)
 		[_SSL notifyPeerToClose];
-		[self reinit_SSL];
-		[super close];
-		return;
-	}
+
 
 	[self reinit_SSL];
+	[super close];
 
 }
 

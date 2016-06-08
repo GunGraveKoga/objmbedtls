@@ -161,7 +161,6 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 @synthesize keyUsage = _keyUsage;
 @synthesize extendedKeyUsage = _extendedKeyUsage;
 @synthesize serialNumber = _serialNumber;
-@dynamic PK;
 
 + (instancetype)certificate
 {
@@ -197,7 +196,6 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	_isCA = false;
 	_maxPathLength = 0;
 	_version = 0;
-	_PK = nil;
 	_parsed = false;
 
 	return self;
@@ -215,7 +213,6 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	[_keyUsage release];
 	[_extendedKeyUsage release];
 	[_serialNumber release];
-	[_PK release];
 	mbedtls_x509_crt_free( self.context);
 
 	[super dealloc];
@@ -788,25 +785,26 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	return &_certificate;
 }
 
-- (MBEDPKey *)PK
+- (MBEDPKey *)publicKey
 {
-	if (_PK == nil) {
-		int size = 0;
-		unsigned char buf[PUB_DER_MAX_BYTES] = {0};
-		OFDataArray* bytes;
+	
+	int size = 0;
+	unsigned char buf[PUB_DER_MAX_BYTES] = {0};
+	OFDataArray* bytes;
+	MBEDPKey* pub;
 
-		if ((size = mbedtls_pk_write_pubkey_der(&(self.context->pk), buf, PUB_DER_MAX_BYTES)) <= 0)
-			@throw [MBEDTLSException exceptionWithObject:self errorNumber:size];
+	if ((size = mbedtls_pk_write_pubkey_der(&(self.context->pk), buf, PUB_DER_MAX_BYTES)) <= 0)
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:size];
+	void* pool = objc_autoreleasePoolPush();
 
-		bytes = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char)];
-		[bytes addItems:(buf + (sizeof(buf) - size)) count:size];
+	bytes = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
+	[bytes addItems:(buf + (sizeof(buf) - size)) count:size];
 
-		_PK = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:true];
+	pub = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:true];
 
-		[bytes release];
-	}
+	objc_autoreleasePoolPop(pool);
 
-	return _PK;
+	return [pub autorelease];
 }
 
 #if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)

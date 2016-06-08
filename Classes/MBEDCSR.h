@@ -35,11 +35,14 @@
 
 @property (assign, readonly)size_t keySize;
 
++ (instancetype)csr;
 + (instancetype)csrWithDER:(OFDataArray *)der;
 + (instancetype)csrWithPEM:(OFString *)pem;
++ (instancetype)csrWithFile:(OFString *)file;
 
 - (instancetype)initWithDER:(OFDataArray *)der;
 - (instancetype)initWithPEM:(OFString *)pem;
+- (instancetype)initWithFile:(OFString *)file;
 
 - (MBEDPKey *)publicKey;
 

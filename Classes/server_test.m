@@ -6,6 +6,7 @@
 #import "MBEDSSL.h"
 #import "SSLAcceptFailedException.h"
 #import "PEM.h"
+#import "MBEDCSR.h"
 
 #import <WinBacktrace.h>
 
@@ -154,6 +155,10 @@ OF_APPLICATION_DELEGATE(Test)
 
  	if ([MBEDPKey publicKey:pub matchesPrivateKey:key])
  		of_log(@"Pub matches prv");
+
+ 	MBEDCSR* csr = [MBEDCSR csrWithFile:@"./server1.req.sha1"];
+
+ 	of_log(@"%@", csr);
 
 	MBEDSSLSocket* srv = [MBEDSSLSocket socket];
 

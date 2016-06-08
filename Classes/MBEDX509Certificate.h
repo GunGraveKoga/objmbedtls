@@ -40,8 +40,7 @@
 	OFArray *_keyUsage;
 	OFArray *_extendedKeyUsage;
 	OFString *_serialNumber;
-	MBEDPKey *_PK;
-
+	
 @protected
 	bool _parsed;
 
@@ -123,11 +122,6 @@
 @property(copy, readonly)OFString* serialNumber;
 
 /*!
- * Public key.
- */
-@property(copy, readonly)MBEDPKey* PK;
-
-/*!
  * @brief Creates a new, autoreleased initialization MBEDX509Certificate instance.
  *
  * @return A new, autoreleased initialization MBEDX509Certificate instance
@@ -173,6 +167,11 @@
 - (bool)hasSRVNameMatchingDomain: (OFString*)domain service: (OFString*)service;
 
 - (bool)isRevoked:(MBEDCRL*)crl;
+
+/*!
+ * Public key of certificate.
+ */
+- (MBEDPKey *)publicKey;
 
 #if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
 - (instancetype)initWithSystemCA;

@@ -54,9 +54,9 @@ OF_APPLICATION_DELEGATE(Test)
 	}
 	if (connected) {
 		of_log(@"Key: %@", socket.peerCertificate);
-		of_log(@"Key: %@", socket.peerCertificate.PK);
-		of_log(@"DER: %@", socket.peerCertificate.PK.DER);
-		of_log(@"PEM: \n%@", socket.peerCertificate.PK.PEM);
+		of_log(@"Key: %@", socket.peerCertificate.publicKey);
+		of_log(@"DER: %@", socket.peerCertificate.publicKey.DER);
+		of_log(@"PEM: \n%@", socket.peerCertificate.publicKey.PEM);
 		of_log(@"Next %@", [socket.peerCertificate next]);
 		[socket writeLine:@"GET / HTTP/1.0\r\n"];
 
@@ -80,9 +80,9 @@ OF_APPLICATION_DELEGATE(Test)
 		connected = false;
 	}
 	if (connected) {
-		of_log(@"Key: %@", socket.peerCertificate.PK);
-		of_log(@"DER: %@", socket.peerCertificate.PK.DER);
-		of_log(@"PEM: \n%@", socket.peerCertificate.PK.PEM);
+		of_log(@"Key: %@", socket.peerCertificate.publicKey);
+		of_log(@"DER: %@", socket.peerCertificate.publicKey.DER);
+		of_log(@"PEM: \n%@", socket.peerCertificate.publicKey.PEM);
 		of_log(@"Next %@", [socket.peerCertificate next]);
 
 		[socket writeLine:@"GET / HTTP/1.0\r\n"];
@@ -125,6 +125,7 @@ OF_APPLICATION_DELEGATE(Test)
 	}
 	[sks close];
 
+	
 	of_log(@"Async connect:\n\n");
 	
 	MBEDSSLSocket* con = [MBEDSSLSocket socket];
@@ -132,10 +133,11 @@ OF_APPLICATION_DELEGATE(Test)
 	__block bool async_end = false;
 	[con asyncConnectToHost:@"google.com" port:443 block:^(OFTCPSocket *socket, OFException *_Nullable exception){
 
-		if (exception) {
+		if (exception != nil) {
 			of_log(@"Async connect exception: %@", exception);
 			return;
 		}
+		of_log(@"Async connection");
 
 		MBEDSSLSocket* sock = (MBEDSSLSocket*)socket;
 		
@@ -157,6 +159,7 @@ OF_APPLICATION_DELEGATE(Test)
 
 		return;
 	}];
+
 }
 
 @end

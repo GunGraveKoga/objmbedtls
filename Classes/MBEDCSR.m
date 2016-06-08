@@ -54,6 +54,11 @@
 @synthesize keyName = _keyName;
 @synthesize keySize = _keySize;
 
++ (instancetype)csr
+{
+	return [[[self alloc] init] autorelease];
+}
+
 + (instancetype)csrWithDER:(OFDataArray *)der
 {
 	return [[[self alloc] initWithDER:der] autorelease];
@@ -62,6 +67,11 @@
 + (instancetype)csrWithPEM:(OFString *)pem
 {
 	return [[[self alloc] initWithPEM:pem] autorelease];
+}
+
++ (instancetype)csrWithFile:(OFString *)file
+{
+	return [[[self alloc] initWithFile:file] autorelease];
 }
 
 - (instancetype)init
@@ -119,6 +129,27 @@
 
 		@throw [OFInitializationFailedException exceptionWithClass:[MBEDCSR class]];
 
+	}
+
+	return self;
+}
+
+- (instancetype)initWithFile:(OFString *)file
+{
+	self = [self init];
+
+	@try {
+		[self parseFile:file];
+
+	}@catch(MBEDTLSException* exc) {
+		[self release];
+
+		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDCSR class] errorNumber:exc.errNo];
+
+	}@catch (id e) {
+		[self release];
+
+		@throw [OFInitializationFailedException exceptionWithClass:[MBEDCSR class]];
 	}
 
 	return self;
