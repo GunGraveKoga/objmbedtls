@@ -58,7 +58,8 @@ SOURCES_OBJFW_SSL_SOCKET= MBEDX509Certificate.m MBEDSSL.m MBEDCRL.m 	\
 						SSLCertificateVerificationFailedException.m SSLCertificationAuthorityMissingException.m SSLConnectionFailedException.m 	\
 						SSLReadFailedException.m SSLWriteFailedException.m MBEDTLSException.m \
 						MBEDInitializationFailedException.m PEMParser.m X509Object.m \
-						MBEDEntropy.m MBEDCSR.m MBEDSSLConfig.m
+						MBEDEntropy.m MBEDCSR.m MBEDSSLConfig.m \
+						MozillaCARootCertificates.m
 
 SOURCES_OBJFW_SSL_SOCKET_LIST := $(addprefix $(objmbedtls_source_dir)/,$(SOURCES_OBJFW_SSL_SOCKET))				
 

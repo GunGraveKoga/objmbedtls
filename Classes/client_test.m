@@ -24,6 +24,10 @@ OF_APPLICATION_DELEGATE(Test)
 
 	of_log(@"Verefy exception:\n\n");
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
+	socket.CA = [MBEDX509Certificate certificateWithDER:[OFDataArray dataArrayWithContentsOfFile:@"./GIAG2.crt"]]; //[MBEDX509Certificate certificateWithPEM:kMozillaCARootCertificates];
+	of_log(@"%@", socket.CA);
+	socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
+	//socket.certificateProfile = kNextDefaultProfile;
 	bool connected = true;
 	@try {
 		[socket connectToHost:@"173.194.222.139" port:443]; //exception expected
@@ -159,6 +163,8 @@ OF_APPLICATION_DELEGATE(Test)
 
 		return;
 	}];
+
+	
 
 }
 

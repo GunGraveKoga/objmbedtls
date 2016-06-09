@@ -260,25 +260,17 @@
 		if (self.CA == nil) {
 			if (self.certificateAuthorityFile != nil) {
 				self.CA = [MBEDX509Certificate certificateWithFile:self.certificateAuthorityFile];
-			}
-			else {
-			#if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X)
-				self.CA = [MBEDX509Certificate certificateWithSystemCA];
-			#else
+
+			} else {
 				self.CA = [MBEDX509Certificate certificate];
-			#endif
 			}
 		}
 
 		if (self.CRL == nil) {
 			if (self.certificateRevocationListFile != nil) {
 				self.CRL = [MBEDCRL crlWithFile:self.certificateRevocationListFile];
+
 			}
-			#if defined(OF_WINDOWS) || defined(OF_LINUX) || defined(OF_MAC_OS_X) 
-			else {
-				self.CRL = [MBEDCRL crlWithSystemCRL];	
-			}
-			#endif
 		}
 
 		if (self.CRL == nil)
@@ -292,7 +284,8 @@
 		if (self.PK == nil && self.privateKeyFile != nil)
 			self.PK = [MBEDPKey keyWithPrivateKeyFile:self.privateKeyFile password:[OFString stringWithUTF8String:self.privateKeyPassphrase]];
 
-		[self.config setOwnCertificate:self.ownCertificate withPrivateKey:self.PK];
+		if (self.PK != nil && self.ownCertificate != nil)
+			[self.config setOwnCertificate:self.ownCertificate withPrivateKey:self.PK];
 
 		_SSL = [[MBEDSSL alloc] initWithConfig:self.config];
 
@@ -322,8 +315,6 @@
 				exception = [SSLConnectionFailedException exceptionWithHost: host port: port socket: self];
 
 			[exception retain];
-
-			of_log(@"%@", e);
 
 			@throw exception;
 		}

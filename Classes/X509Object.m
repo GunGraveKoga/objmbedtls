@@ -119,7 +119,9 @@
 
 	}@finally {
 		[pool release];
-		[exception autorelease];
+
+		if (exception != nil)
+			[exception autorelease];
 	}
 }
 
@@ -180,7 +182,9 @@
 
 	}@finally {
 		[pool release];
-		[exception autorelease];
+
+		if (exception != nil)
+			[exception autorelease];
 
 	}
 }

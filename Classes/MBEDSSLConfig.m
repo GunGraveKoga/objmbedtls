@@ -21,6 +21,45 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
   	1024,      /* RSA min key len */
 };
 
+const mbedtls_x509_crt_profile kNextDefaultProfile =
+{
+    /* Hashes from SHA-256 and above */
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_MD_SHA256 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_MD_SHA384 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_MD_SHA512 ),
+    0xFFFFFFF, /* Any PK alg    */
+#if defined(MBEDTLS_ECP_C)
+    /* Curves at or above 128-bit security level */
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_SECP256R1 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_SECP384R1 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_SECP521R1 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_BP256R1 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_BP384R1 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_BP512R1 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_SECP256K1 ),
+#else
+    0,
+#endif
+    2048,
+};
+
+const mbedtls_x509_crt_profile kNSASuiteBProfile =
+{
+    /* Only SHA-256 and 384 */
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_MD_SHA256 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_MD_SHA384 ),
+    /* Only ECDSA */
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_PK_ECDSA ),
+#if defined(MBEDTLS_ECP_C)
+    /* Only NIST P-256 and P-384 */
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_SECP256R1 ) |
+    MBEDTLS_X509_ID_FLAG( MBEDTLS_ECP_DP_SECP384R1 ),
+#else
+    0,
+#endif
+    0,
+};
+
 @interface MBEDSSLConfig()
 
 
@@ -70,14 +109,14 @@ const mbedtls_x509_crt_profile kDefaultProfile = {
 
 - (instancetype)initWithTCPServerConfig
 {
-	self = [self initWithEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
+	self = [self initWithEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_NONE];
 
 	return self;
 }
 
 - (instancetype)initWithTCPClientConfig
 {
-	self = [self initWithEndpoint:MBEDTLS_SSL_IS_CLIENT transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_NONE];
+	self = [self initWithEndpoint:MBEDTLS_SSL_IS_CLIENT transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
 
 	return self;
 }

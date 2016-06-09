@@ -12,6 +12,8 @@
 @class MBEDPKey;
 
 OBJMBEDTLS_EXPORT const mbedtls_x509_crt_profile kDefaultProfile;
+OBJMBEDTLS_EXPORT const mbedtls_x509_crt_profile kNextDefaultProfile;
+OBJMBEDTLS_EXPORT const mbedtls_x509_crt_profile kNSASuiteBProfile;
 
 typedef enum {
 	OBJMBED_SSLVERSION_TLSv1 = 0,

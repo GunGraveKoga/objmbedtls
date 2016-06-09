@@ -15,6 +15,8 @@
 @class MBEDPKey;
 @class MBEDCRL;
 
+OBJMBEDTLS_EXPORT OFString *const kMozillaCARootCertificates;
+
 /*!
  * @class MBEDX509Certificate \
  *	  MBEDX509Certificate.h \
