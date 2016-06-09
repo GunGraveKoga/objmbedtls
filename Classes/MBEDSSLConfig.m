@@ -146,8 +146,6 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 
 	mbedtls_ssl_conf_rng(self.context, mbedtls_ctr_drbg_random, entropy.ctr_drbg);
 
-	mbedtls_ssl_conf_ciphersuites(self.context, mbedtls_ssl_list_ciphersuites());
-
 	return self;
 }
 
@@ -181,6 +179,8 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 		default:
 			@throw [OFInvalidArgumentException exception];
 	}
+
+	mbedtls_ssl_conf_ciphersuites(self.context, mbedtls_ssl_list_ciphersuites());
 }
 
 - (void)setCertificateAuthorityChain:(MBEDX509Certificate *)CA

@@ -84,33 +84,37 @@
 				[self parseDER:data];
 			else
 				[self parseDER:data password:password];
-
-			[pool release];
-
-			return;
-		}
-		
-		if (hasHeader(data, header) && hasFooter(data, footer)) {
+			
+		} else if (hasHeader(data, header) && hasFooter(data, footer)) {
 			
 			OFArray* DERs;
 			
 			DERs = PEMtoDER([OFString stringWithUTF8String:(const char *)[data items] length:[data count]], header, footer, password);
 
 			for (OFDataArray* der in DERs) {
-				@autoreleasepool {
-					
-					if (password == nil)
-						[self parseDER:der];
-					else
-						[self parseDER:der password:password];
-
-				}
+				if (password == nil)
+					[self parseDER:der];
+				else
+					[self parseDER:der password:password];
 			}
 
 		} else {
 			@throw [MBEDTLSException exceptionWithObject:self errorNumber:MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT];
 		}
 
+
+	} @catch (MBEDTLSException* exc) {
+
+		if (exc.sourceObject == nil) {
+			exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:exc.errNo];
+
+			@throw exception;
+
+		} else {
+			exception = [exc retain];
+
+			@throw;
+		}
 
 	} @catch (id e) {
 		exception = [e retain];
@@ -166,27 +170,23 @@
 
 - (void)parseFile:(OFString *)fileName password:(OFString*)password
 {
-	id exception = nil;
-
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
-
+	OFDataArray* data = nil;
 	@try {
 
-		OFDataArray* data = [OFDataArray dataArrayWithContentsOfFile:fileName];
+		data = [[OFDataArray alloc] initWithContentsOfFile:fileName];
 
 		[self parsePEMorDER:data password:password];
 
+		[data release];
+
 	}@catch(id e) {
-		exception = [e retain];
-		@throw;
+		if (data != nil)
+			[data release];
 
-	}@finally {
-		[pool release];
-
-		if (exception != nil)
-			[exception autorelease];
+		@throw e;
 
 	}
+
 }
 
 @end

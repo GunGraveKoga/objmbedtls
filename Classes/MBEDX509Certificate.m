@@ -241,6 +241,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	self = [self init];
 	@try {
 		[self parseFilesAtPath:path];
+
 	}@catch(MBEDTLSException* exc) {
 		[self release];
 		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:exc.errNo];
@@ -495,7 +496,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		if (nil == dnString) {
 			dnString = parse_dn_string(buf, (size_t)ret);	
 		}
-
+		
 		self.issuer = [self X509_dictionaryFromX509Name:dnString];
 	}
 	else {
@@ -581,6 +582,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	objc_autoreleasePoolPop(pool);
 
 	_parsed = true;
+
 }
 
 - (bool)hasCommonNameMatchingDomain: (OFString*)domain
@@ -795,14 +797,15 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 	if ((size = mbedtls_pk_write_pubkey_der(&(self.context->pk), buf, PUB_DER_MAX_BYTES)) <= 0)
 		@throw [MBEDTLSException exceptionWithObject:self errorNumber:size];
-	void* pool = objc_autoreleasePoolPush();
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
 	bytes = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
 	[bytes addItems:(buf + (sizeof(buf) - size)) count:size];
 
 	pub = [[MBEDPKey alloc] initWithDER:bytes password:nil isPublic:true];
 
-	objc_autoreleasePoolPop(pool);
+	[pool release];
 
 	return [pub autorelease];
 }
@@ -879,7 +882,9 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 - (void)parsePEMorDER:(OFDataArray *)data password:(_Nullable OFString *)password
 {
 	
-	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+	id exception = nil;
+
+	void* pool = objc_autoreleasePoolPush();
 
 	OFArray* tokens = @[
 			kPEMString_X509_CRT,
@@ -891,54 +896,44 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 
 	@try {
 
-		id last_exception = nil;
-
 		for (OFString* token in tokens) {
-
-			void* loop_pool = objc_autoreleasePoolPush();
 
 			@try {
 				[self parsePEMorDER:data header:[OFString stringWithFormat:@"-----BEGIN %@-----", token] footer:[OFString stringWithFormat:@"-----END %@-----", token] password:password];
 
 			} @catch(MBEDTLSException* exc) {
 
-				if (exc.errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT)
+				if (exc.errNo == MBEDTLS_ERR_PEM_NO_HEADER_FOOTER_PRESENT) {
 					continue;
 
-				last_exception = [[MBEDTLSException alloc] initWithObject:self errorNumber:exc.errNo];
+				} else {
 
-				@throw last_exception;
+					@throw exc;
 
-			} @catch(OFException* e) {
+				}
 
-				last_exception = [e retain];
+			} @catch(id e) {
 
-				@throw;
-
-			}@finally {
-
-				objc_autoreleasePoolPop(loop_pool);
-
-				if (last_exception != nil)
-					[last_exception autorelease];
+				@throw e;
 
 			}
 
 			parsed = true;
-			objc_autoreleasePoolPop(loop_pool);
 			
 			break;
 		}
 
 	} @catch (id e) {
-		[e retain];
-		[pool release];
+		exception = [e retain];
 
-		@throw [e autorelease];
+		@throw;
+
+	} @finally {
+		objc_autoreleasePoolPop(pool);
+
+		if (exception != nil)
+			[exception autorelease];
 	}
-
-	
-	[pool release];
 
 	if (!parsed)
 		@throw [OFInvalidArgumentException exception];
@@ -985,6 +980,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	[ret appendUTF8String:"\n\n"];
 	[ret appendUTF8String:"Subject: "];
 	firstKey = true;
+	
 	for (OFString* key in [self.subject allKeys]) {
 		firstValue = true;
 
@@ -1007,22 +1003,25 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 			firstKey = false;
 	}
 	[ret appendUTF8String:"\n\n"];
-	[ret appendUTF8String:"SANs: "];
-	for (OFString* key in [self.subjectAlternativeNames allKeys]) {
-		firstValue = true;
-		@autoreleasepool {
-			for (OFString* value in [self.subjectAlternativeNames objectForKey:key]) {
-				if (!firstValue)
-					[ret appendUTF8String:", "];
+	if (self.subjectAlternativeNames) {
+		[ret appendUTF8String:"SANs: "];
+	
+		for (OFString* key in [self.subjectAlternativeNames allKeys]) {
+			firstValue = true;
+			@autoreleasepool {
+				for (OFString* value in [self.subjectAlternativeNames objectForKey:key]) {
+					if (!firstValue)
+						[ret appendUTF8String:", "];
 
-				[ret appendString:value];
+					[ret appendString:value];
 
-				if (firstValue)
-					firstValue = false;
+					if (firstValue)
+						firstValue = false;
+				}
 			}
 		}
+		[ret appendUTF8String:"\n\n"];
 	}
-	[ret appendUTF8String:"\n\n"];
 	[ret appendFormat: @"Issued on: %@\n\n", [self.issued localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]];
 	[ret appendFormat: @"Expires on: %@\n\n", [self.expires localDateStringWithFormat:@"%Y-%m-%d %H:%M:%S"]];
 	[ret appendFormat: @"Signature Algorithm: %@\n\n", self.signatureAlgorithm];

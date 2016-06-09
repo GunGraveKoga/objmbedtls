@@ -1,5 +1,6 @@
 #import <ObjFW/ObjFW.h>
 #import "MBEDSSLSocket.h"
+#import "MBEDSSLConfig.h"
 #import "MBEDCRL.h"
 #import "MBEDX509Certificate.h"
 #import "MBEDPKey.h"
@@ -24,10 +25,11 @@ OF_APPLICATION_DELEGATE(Test)
 
 	of_log(@"Verefy exception:\n\n");
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
-	socket.CA = [MBEDX509Certificate certificateWithDER:[OFDataArray dataArrayWithContentsOfFile:@"./GIAG2.crt"]]; //[MBEDX509Certificate certificateWithPEM:kMozillaCARootCertificates];
-	of_log(@"%@", socket.CA);
 	socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
 	//socket.certificateProfile = kNextDefaultProfile;
+	socket.CA = [MBEDX509Certificate certificateWithFile:@"./GIAG2.crt"];
+	of_log(@"%@", socket.CA);
+	socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
 	bool connected = true;
 	@try {
 		[socket connectToHost:@"173.194.222.139" port:443]; //exception expected

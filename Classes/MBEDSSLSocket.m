@@ -90,12 +90,16 @@
 - (void)reinit_SSL
 {
 	[_SSL release];
+	[_config release];
+
 	if (_peerCertificate != nil) {
 		[_peerCertificate release];
 		_peerCertificate = nil;
 	}
+
+	_SSL = nil;
+	_config = nil;
 	
-	_SSL = [MBEDSSL new];
 }
 
 - (instancetype)initWithSocket:(OFTCPSocket *)socket
@@ -254,8 +258,6 @@
 				self.config = [MBEDSSLConfig configForTCPServer];
 		}
 
-		self.config.certificateProfile = self.certificateProfile;
-		self.config.validSSLVersion = self.sslVersion;
 
 		if (self.CA == nil) {
 			if (self.certificateAuthorityFile != nil) {
@@ -286,6 +288,9 @@
 
 		if (self.PK != nil && self.ownCertificate != nil)
 			[self.config setOwnCertificate:self.ownCertificate withPrivateKey:self.PK];
+
+
+		self.config.validSSLVersion = self.sslVersion;
 
 		_SSL = [[MBEDSSL alloc] initWithConfig:self.config];
 
@@ -386,6 +391,7 @@
 			if (host != nil) {
 				if (self.peerCertificate == nil) {
 					[self close];
+					of_log(@"Nil peer certificate!");
 					@throw [SSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_MISSING certificate:nil];
 				}
 
@@ -420,6 +426,7 @@
 
 
 	[self reinit_SSL];
+
 	[super close];
 
 }
@@ -604,11 +611,11 @@
 {
 	if (_peerCertificate == nil) {
 		mbedtls_x509_crt *peerCrt = NULL;
-		@try {
-			peerCrt = [_SSL peerCertificate];
-		}@catch (id e) {
+
+		peerCrt = [_SSL peerCertificate];
+
+		if (peerCrt == NULL)
 			return nil;
-		}
 
 		OFAutoreleasePool* pool = [OFAutoreleasePool new];
 
