@@ -376,7 +376,7 @@
 
 		int res = 0;
 		if (flag) {
-			res = [_SSL peerCertificateVerified];
+			res = (int)[_SSL peerCertificateVerified];
 			if (res != 0) {
 				if (self.delegate != nil) {
 					if ([self.delegate respondsToSelector:@selector(socket:shouldAcceptCertificate:)]) {
@@ -391,7 +391,6 @@
 			if (host != nil) {
 				if (self.peerCertificate == nil) {
 					[self close];
-					of_log(@"Nil peer certificate!");
 					@throw [SSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_MISSING certificate:nil];
 				}
 

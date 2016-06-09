@@ -28,6 +28,7 @@
 @property(copy, readwrite)OFArray* keyUsage;
 @property(copy, readwrite)OFArray* extendedKeyUsage;
 @property(copy, readwrite)OFString* serialNumber;
+@property(copy, readwrite)OFDataArray* signature;
 
 
 - (OFDictionary *)X509_dictionaryFromX509Name:(OFString *)name;
@@ -161,6 +162,7 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 @synthesize keyUsage = _keyUsage;
 @synthesize extendedKeyUsage = _extendedKeyUsage;
 @synthesize serialNumber = _serialNumber;
+@synthesize signature = _signature;
 
 + (instancetype)certificate
 {
@@ -577,6 +579,12 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		if ( self.context->max_pathlen > 0)
 			self.maxPathLength = (size_t)( self.context->max_pathlen - 1);
 	}
+
+	OFDataArray* sign = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
+	
+	[sign addItems:self.context->sig.p count:self.context->sig.len];
+
+	self.signature = sign;
 
 
 	objc_autoreleasePoolPop(pool);
@@ -1051,6 +1059,9 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		[ret appendUTF8String:"\n\n"];
 		[ret appendFormat: @"Extended Key Usage: %@", self.extendedKeyUsage];
 	}
+
+	[ret appendUTF8String:"\n\n"];
+	[ret appendFormat:@"Signature: ", self.signature];
 
 	objc_autoreleasePoolPop(pool);
 	

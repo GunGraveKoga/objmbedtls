@@ -42,6 +42,7 @@ OBJMBEDTLS_EXPORT OFString *const kMozillaCARootCertificates;
 	OFArray *_keyUsage;
 	OFArray *_extendedKeyUsage;
 	OFString *_serialNumber;
+	OFDataArray *_signature;
 	
 @protected
 	bool _parsed;
@@ -122,6 +123,9 @@ OBJMBEDTLS_EXPORT OFString *const kMozillaCARootCertificates;
  * Serial number.
  */
 @property(copy, readonly)OFString* serialNumber;
+
+
+@property(copy, readonly)OFDataArray* signature;
 
 /*!
  * @brief Creates a new, autoreleased initialization MBEDX509Certificate instance.
