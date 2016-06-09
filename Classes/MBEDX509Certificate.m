@@ -581,9 +581,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	}
 
 	OFDataArray* sign = [OFDataArray dataArrayWithItemSize:sizeof(unsigned char)];
-	
 	[sign addItems:self.context->sig.p count:self.context->sig.len];
-
 	self.signature = sign;
 
 
@@ -1061,7 +1059,7 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 	}
 
 	[ret appendUTF8String:"\n\n"];
-	[ret appendFormat:@"Signature: ", self.signature];
+	[ret appendFormat:@"Signature: %@", self.signature];
 
 	objc_autoreleasePoolPop(pool);
 	

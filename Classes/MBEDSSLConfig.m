@@ -7,6 +7,28 @@
 #import "MBEDCRL.h"
 #import "MBEDPKey.h"
 
+static int my_verify( void *data, mbedtls_x509_crt *crt, int depth, uint32_t *flags )
+{
+    char buf[1024];
+    MBEDSSLConfig* cfg = (__bridge MBEDSSLConfig*)data;
+
+    of_log(@"%@", cfg);
+
+    of_log( @"Verify requested for (Depth %d):", depth );
+    mbedtls_x509_crt_info( buf, sizeof( buf ) - 1, "", crt );
+    of_log( @"%s", buf );
+
+    if ( ( *flags ) == 0 )
+        of_log( @"  This certificate has no flags" );
+    else
+    {
+        mbedtls_x509_crt_verify_info( buf, sizeof( buf ), "  ! ", *flags );
+        of_log( @"%s\n", buf );
+    }
+
+    return( 0 );
+}
+
 
 const mbedtls_x509_crt_profile kDefaultProfile = {
 	/* Hashes from SHA-1 and above */
@@ -139,6 +161,8 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 
 		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDSSLConfig class] errorNumber:ret];
 	}
+
+	mbedtls_ssl_conf_verify( self.context, my_verify, (__bridge void*)(self) );
 
 	mbedtls_ssl_conf_authmode(self.context, mode);
 
