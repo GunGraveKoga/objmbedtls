@@ -1,11 +1,11 @@
 #import <ObjFW/ObjFW.h>
+#import <WinBacktrace.h>
 #import "MBEDSSLSocket.h"
 #import "MBEDSSLConfig.h"
 #import "MBEDCRL.h"
 #import "MBEDX509Certificate.h"
 #import "MBEDPKey.h"
 #import "MBEDSSL.h"
-#import "WinBacktrace.h"
 
 
 @interface Test: OFObject<OFApplicationDelegate>
@@ -25,11 +25,11 @@ OF_APPLICATION_DELEGATE(Test)
 
 	of_log(@"Verefy exception:\n\n");
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
-	socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
+	//socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
 	//socket.certificateProfile = kNextDefaultProfile;
 	socket.CA = [MBEDX509Certificate certificateWithFile:@"./GIAG2.crt"];
 	of_log(@"%@", socket.CA);
-	socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
+	//socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
 	bool connected = true;
 	@try {
 		[socket connectToHost:@"173.194.222.139" port:443]; //exception expected

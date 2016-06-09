@@ -624,6 +624,19 @@
 
 		_peerCertificate = [[MBEDX509Certificate alloc] initWithDER:bytes];
 
+		mbedtls_x509_crt *next = NULL;
+
+		mbedtls_x509_crt *prev = peerCrt;
+
+		while ((next = prev->next) != NULL) {
+			[bytes removeAllItems];
+			[bytes addItems:next->raw.p count:next->raw.len];
+
+			[_peerCertificate parseDER:bytes];
+
+			prev = next;
+		}
+
 		[pool release];
 
 	}

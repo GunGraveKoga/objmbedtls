@@ -29,6 +29,13 @@ static int my_verify( void *data, mbedtls_x509_crt *crt, int depth, uint32_t *fl
     return( 0 );
 }
 
+static void my_debug( void *ctx, int level,
+                      const char *file, int line,
+                      const char *str )
+{
+    of_log(@"%s:%04d: |%d| %s", file, line, level, str);
+}
+
 
 const mbedtls_x509_crt_profile kDefaultProfile = {
 	/* Hashes from SHA-1 and above */
@@ -163,6 +170,7 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 	}
 
 	mbedtls_ssl_conf_verify( self.context, my_verify, (__bridge void*)(self) );
+	mbedtls_ssl_conf_dbg(self.context, my_debug, (__bridge void*)(self));
 
 	mbedtls_ssl_conf_authmode(self.context, mode);
 
