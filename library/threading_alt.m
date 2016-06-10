@@ -15,52 +15,38 @@
 
 
 void objfw_mbedtls_mutex_init(mbedtls_threading_mutex_t *mutex_) {
-	@try {
-		mutex_->mutex = [OFMutex new];
-	}@catch(OFException* e) {
-		mutex_->is_valid = false;
-		mutex_->mutex = nil;
-	}
-	mutex_->is_valid = true;
-	return;
+	if( mutex_ == NULL )
+        return;
+
+    mutex_->is_valid = of_mutex_new(&(mutex_->mutex));
 
 }
 
 void objfw_mbedtls_mutex_free(mbedtls_threading_mutex_t *mutex_) {
-	mutex_->is_valid = false;
-	[mutex_->mutex release];
-	mutex_->mutex = nil;
-	return;
+	if( mutex_ == NULL )
+        return;
+
+    (void)of_mutex_free(&(mutex_->mutex));
 }
 
 int objfw_mbedtls_mutex_lock(mbedtls_threading_mutex_t *mutex_) {
-	if (mutex_->is_valid) {
-		if (mutex_->mutex != nil) {
-			@try {
-				[mutex_->mutex lock];
-			}@catch(OFException* e) {
-				return( MBEDTLS_ERR_THREADING_MUTEX_ERROR );
-			}
+	if( mutex_ == NULL || ! mutex_->is_valid )
+        return( MBEDTLS_ERR_THREADING_BAD_INPUT_DATA );
 
-			return(0);
-		}
-	}
-	return( MBEDTLS_ERR_THREADING_BAD_INPUT_DATA );
+    if (!of_mutex_lock(&(mutex_->mutex)))
+    	return MBEDTLS_ERR_THREADING_MUTEX_ERROR;
+
+    return 0;
 }
 
 int objfw_mbedtls_mutex_unlock(mbedtls_threading_mutex_t *mutex_) {
-	if (mutex_->is_valid) {
-		if (mutex_->mutex != nil) {
-			@try {
-				[mutex_->mutex unlock];
-			}@catch(OFException* e) {
-				return( MBEDTLS_ERR_THREADING_MUTEX_ERROR );
-			}
+	if( mutex_ == NULL || ! mutex_->is_valid )
+        return( MBEDTLS_ERR_THREADING_BAD_INPUT_DATA );
 
-			return(0);
-		}
-	}
-	return( MBEDTLS_ERR_THREADING_BAD_INPUT_DATA );
+    if (!of_mutex_unlock(&(mutex_->mutex)))
+    	return MBEDTLS_ERR_THREADING_MUTEX_ERROR;
+
+    return 0;
 }
 
 #endif

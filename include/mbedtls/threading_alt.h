@@ -1,8 +1,7 @@
 #ifndef MBEDTLS_THREADING_ALT_H
 #define MBEDTLS_THREADING_ALT_H
 
-#import <ObjFW/OFObject.h>
-#import <ObjFW/OFMutex.h>
+#import <ObjFW/threading.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,7 +9,7 @@ extern "C" {
 
 typedef struct
 {
-    OFMutex* mutex;
+    of_mutex_t mutex;
     bool is_valid;
 } mbedtls_threading_mutex_t;
 

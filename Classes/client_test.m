@@ -22,12 +22,13 @@ OF_APPLICATION_DELEGATE(Test)
 - (void)applicationDidFinishLaunching
 {
 	WinBacktrace* plugin = [OFPlugin pluginFromFile:@"WinBacktrace"];
-
+	
 	of_log(@"Verefy exception:\n\n");
+	bool connected = true;
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
 	//socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
 	//socket.certificateProfile = kNextDefaultProfile;
-	socket.CA = [MBEDX509Certificate certificateWithFile:@"./GIAG2.crt"];
+	socket.CA = [MBEDX509Certificate certificateWithFile:@"./GIAG2.crt"];/*
 	of_log(@"%@", socket.CA);
 	//socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
 	bool connected = true;
@@ -48,7 +49,7 @@ OF_APPLICATION_DELEGATE(Test)
 
 		[socket close];
 	}
-
+	
 	connected = true;
 	socket.certificateVerificationEnabled = false;
 	of_log(@"Verefy skipped:\n\n");
@@ -74,7 +75,7 @@ OF_APPLICATION_DELEGATE(Test)
 		[socket close];
 	}
 
-
+	*/
 	connected = true;
 	socket.certificateVerificationEnabled = true;
 	of_log(@"Verefy passed:\n\n");
@@ -99,7 +100,7 @@ OF_APPLICATION_DELEGATE(Test)
 		}
 		
 		[socket close];
-	}
+	}/*
 	of_log(@"SSL less connection:\n\n");
 	OFTCPSocket* sk = [OFTCPSocket socket];
 
@@ -166,8 +167,8 @@ OF_APPLICATION_DELEGATE(Test)
 		return;
 	}];
 
-	
-
+	*/
+	[OFApplication terminate];
 }
 
 @end

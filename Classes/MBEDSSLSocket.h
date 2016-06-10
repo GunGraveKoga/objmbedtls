@@ -30,7 +30,6 @@
     OFString* _certificateAuthorityFile;
     OFString* _certificateRevocationListFile;
     bool _certificateVerificationEnabled;
-    bool _requestClientCertificatesEnabled;
     objmbed_ssl_version_t _sslVersion;
     mbedtls_x509_crt_profile _certificateProfile;
 
@@ -43,7 +42,7 @@
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDCRL* CRL;
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDPKey* PK;
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* ownCertificate;
-@property OF_NULLABLE_PROPERTY (retain, readonly)MBEDSSLConfig* config;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDSSLConfig* config;
 @property OF_NULLABLE_PROPERTY (retain, readonly)MBEDSSL* SSL;
 
 @property (assign, readonly)mbedtls_net_context* context;
@@ -56,7 +55,6 @@
 @property OF_NULLABLE_PROPERTY (copy) OFString* certificateAuthorityFile;
 @property OF_NULLABLE_PROPERTY (copy) OFString* certificateRevocationListFile;
 @property (getter=isCertificateVerificationEnabled)bool certificateVerificationEnabled;
-@property (getter=isRequestClientCertificatesEnabled)bool requestClientCertificatesEnabled;
 @property (assign, readwrite)objmbed_ssl_version_t sslVersion;
 
 

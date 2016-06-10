@@ -19,9 +19,8 @@
 
 @interface MBEDSSLSocket()
 
-@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDSSLConfig* config;
-- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port asClient:(bool)client;
-- (void)SSL_peerCertificateVerificationWithCA:(bool)flag host:(OFString *)host;
+- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port;
+- (void)SSL_peerCertificateVerificationWithHost:(OFString *)host;
 - (void)reinit_SSL;
 - (void)SSL_super_close;
 
@@ -38,7 +37,6 @@
 @synthesize certificateRevocationListFile = _certificateRevocationListFile;
 @synthesize config = _config;
 @dynamic certificateVerificationEnabled;
-@dynamic requestClientCertificatesEnabled;
 @dynamic SSL;
 
 @synthesize CA = _CA;
@@ -62,7 +60,6 @@
 	self.delegate = nil;
 	self.privateKeyFile = nil;
 	self.certificateVerificationEnabled = true;
-	self.requestClientCertificatesEnabled = false;
 	self.certificateFile = nil;
 	self.privateKeyPassphrase = NULL;
 	self.certificateAuthorityFile = nil;
@@ -221,25 +218,13 @@
 	_certificateVerificationEnabled = enabled;
 }
 
-- (bool)isRequestClientCertificatesEnabled
-{
-	return _requestClientCertificatesEnabled;
-}
-
-- (void)setRequestClientCertificatesEnabled:(bool)enabled
-{
-	_requestClientCertificatesEnabled = enabled;
-}
-
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wobjc-method-access"
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers"
 
-- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port asClient:(bool)client
+- (void)SSL_startTLSWithExpectedHost:(OFString*)host port:(uint16_t)port
 {
-	bool CAChainVerification = false;
-
 	self.context->fd = (int)_socket;
 
 	id exception = nil;
@@ -247,15 +232,20 @@
 	void* pool = objc_autoreleasePoolPush();
 
 	@try {
-		if (client){
-			self.config = [MBEDSSLConfig configForTCPClient];
+		if (self.config == nil) {
+			if (self.isCertificateVerificationEnabled) {
+				if (_isSSLServer)
+					self.config = [MBEDSSLConfig configForTCPServerWithPeerCertificateVerification];
+				else
+					self.config = [MBEDSSLConfig configForTCPClientWithPeerCertificateVerification];
 
-		}
-		else {
-			if (self.isRequestClientCertificatesEnabled)
-				self.config = [MBEDSSLConfig configForTCPServerWithClientCertificateRequest];
-			else
-				self.config = [MBEDSSLConfig configForTCPServer];
+			} else {
+				if (_isSSLServer)
+					self.config = [MBEDSSLConfig configForTCPServer];
+				else
+					self.config = [MBEDSSLConfig configForTCPClient];
+
+			}
 		}
 
 
@@ -294,81 +284,82 @@
 
 		_SSL = [[MBEDSSL alloc] initWithConfig:self.config];
 
-		if (client)
+		if (!_isSSLServer)
 			[_SSL setHostName:host];
-
-		if (self.CA.version != 0) {
-			if (!self.CA.isCA) {
-				@throw [SSLCertificationAuthorityMissingException exceptionWithSocket:self];
-			}
-
-			CAChainVerification = true;
-		}
 
 		[_SSL setBinaryIO:self];
 
+	} @catch(MBEDTLSException* exce) {
+		exception = [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
+
+		[exception retain];
+
+		@throw exception;
+
 	} @catch(id e) {
-		if (client)
-			[super close];
+		exception = [e retain];
 
-		[self reinit_SSL];
-
-		if (client) {
-			if ([e isKindOfClass:[MBEDTLSException class]])
-				exception = [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
-			else
-				exception = [SSLConnectionFailedException exceptionWithHost: host port: port socket: self];
-
-			[exception retain];
-
-			@throw exception;
-		}
-		else {
-			exception = [e retain];
-
-			@throw;
-		}
+		@throw;
 
 	}@finally {
 		objc_autoreleasePoolPop(pool);
 
 		if (exception != nil)
 			[exception autorelease];
+
+		if (!_isSSLServer)
+			[super close];
+
+		[self reinit_SSL];
 	}
 
 	@try {
 		[_SSL handshake];
 
-	}@catch(id e) {
+	}@catch(MBEDTLSException* exc) {
+
+		if (!_isSSLServer)
+			[self close];
+		else
+			[self reinit_SSL];
+
+		@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:exc.errNo];
 		
-		if (client) {
+
+	} @catch(id e) {
+
+		if (!_isSSLServer)
 			[self close];
 
-			if ([e isKindOfClass:[MBEDTLSException class]])
-				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
-			else
-				@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self];
-		}
-		else
-			@throw e;
+		@throw [SSLConnectionFailedException exceptionWithHost:host port:port socket:self];
+
 	}
 
-	
-	[self SSL_peerCertificateVerificationWithCA:CAChainVerification host:host];
+
+	[self SSL_peerCertificateVerificationWithHost:host];
 	
 	
 }
 
 
-- (void)SSL_peerCertificateVerificationWithCA:(bool)flag host:(OFString *)host
+- (void)SSL_peerCertificateVerificationWithHost:(OFString *)host
 {
 	if (!_isSSLServer && host == nil) {
 
-		if (self.isCertificateVerificationEnabled) {
-			[self close];
-			@throw [OFInvalidArgumentException exception];
-		}
+		[self close];
+
+		@throw [MBEDTLSException exceptionWithObject:self errorNumber:MBEDTLS_ERR_X509_BAD_INPUT_DATA];
 	}
+
+	if (_isSSLServer && !self.isCertificateVerificationEnabled)
+		return;
+
+	int res = 0;
+
+	if ((res = (int)[_SSL peerCertificateVerified]) != 0) {
+		
+	}
+
 
 	if (self.isCertificateVerificationEnabled) {
 		if (_isSSLServer && !self.isRequestClientCertificatesEnabled)
@@ -437,17 +428,14 @@
 
 - (void)startTLSWithExpectedHost:(nullable OFString*)host
 {
-	if (_isSSLServer)
-		[self SSL_startTLSWithExpectedHost:host port:0 asClient:false];
-	else
-		[self SSL_startTLSWithExpectedHost:host port:0 asClient:true];
+	[self SSL_startTLSWithExpectedHost:host port:0];
 }
 
 - (void)connectToHost: (OFString*)host port: (uint16_t)port
 {
 	[super connectToHost: host port: port];
 
-	[self SSL_startTLSWithExpectedHost:host port:port asClient:true];
+	[self SSL_startTLSWithExpectedHost:host port:port];
 }
 
 - (uint16_t)bindToHost:(OFString*)host port: (uint16_t)port

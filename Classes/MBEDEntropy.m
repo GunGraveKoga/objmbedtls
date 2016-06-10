@@ -21,10 +21,14 @@ static OFString* __default_personalization_data = nil;
 @dynamic ctr_drbg;
 @synthesize personalizationData = _personalizationData;
 
++ (void)load 
+{
+	mbedtls_threading_set_alt(objfw_mbedtls_mutex_init, objfw_mbedtls_mutex_free, objfw_mbedtls_mutex_lock, objfw_mbedtls_mutex_unlock);
+}
+
 + (void)initialize
 {
 	if (self == [MBEDEntropy class]) {
-		mbedtls_threading_set_alt(objfw_mbedtls_mutex_init, objfw_mbedtls_mutex_free, objfw_mbedtls_mutex_lock, objfw_mbedtls_mutex_unlock);
 		__default_entropy = [MBEDEntropy new];
 
 		if (nil == __default_personalization_data) {

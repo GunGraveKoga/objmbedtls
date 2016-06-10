@@ -7,6 +7,10 @@
 #import "MBEDCRL.h"
 #import "MBEDPKey.h"
 
+#include <mbedtls/debug.h>
+
+static OFFile* __log = nil;
+
 static int my_verify( void *data, mbedtls_x509_crt *crt, int depth, uint32_t *flags )
 {
     char buf[1024];
@@ -33,7 +37,11 @@ static void my_debug( void *ctx, int level,
                       const char *file, int line,
                       const char *str )
 {
-    of_log(@"%s:%04d: |%d| %s", file, line, level, str);
+    if (__log == nil)
+    	__log = [OFFile fileWithPath:@"ssl.log" mode:@"a+"];
+
+    [__log writeFormat:@"%s:%04d: |%d| %s\n", file, line, level, str];
+    //of_log(@"%s:%04d: |%d| %s", file, line, level, str);
 }
 
 
@@ -101,17 +109,22 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 
 + (instancetype)configForTCPServer
 {
-	return [[[self alloc] initWithTCPServerConfig] autorelease];
+	return [[[self alloc] initTCPServerConfig] autorelease];
 }
 
 + (instancetype)configForTCPClient
 {
-	return [[[self alloc] initWithTCPClientConfig] autorelease];
+	return [[[self alloc] initTCPClientConfig] autorelease];
 }
 
-+ (instancetype)configForTCPServerWithClientCertificateRequest
++ (instancetype)configForTCPServerWithPeerCertificateVerification
 {
-	return [[[self alloc] initWithTCPServerConfigClientCertificateRequired] autorelease];
+	return [[[self alloc] initTCPServerConfigWithPeerCertificateVerification] autorelease];
+}
+
++ (instancetype)configForTCPClientWithPeerCertificateVerification
+{
+    return [[[self alloc] initTCPClientConfigWithPeerCertificateVerification] autorelease];
 }
 
 
@@ -136,25 +149,32 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 	return &_context;
 }
 
-- (instancetype)initWithTCPServerConfig
+- (instancetype)initTCPServerConfig
 {
 	self = [self initWithEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_NONE];
 
 	return self;
 }
 
-- (instancetype)initWithTCPClientConfig
+- (instancetype)initTCPClientConfig
 {
 	self = [self initWithEndpoint:MBEDTLS_SSL_IS_CLIENT transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
 
 	return self;
 }
 
-- (instancetype)initWithTCPServerConfigClientCertificateRequired
+- (instancetype)initTCPServerConfigWithPeerCertificateVerification
 {
 	self = [self initWithEndpoint:MBEDTLS_SSL_IS_SERVER transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_OPTIONAL];
 
 	return self;
+}
+
+- (instancetype)initTCPClientConfigWithPeerCertificateVerification
+{
+    self = [self initWithEndpoint:MBEDTLS_SSL_IS_CLIENT transport:MBEDTLS_SSL_TRANSPORT_STREAM preset:MBEDTLS_SSL_PRESET_DEFAULT authMode:MBEDTLS_SSL_VERIFY_REQUIRED];
+
+    return self;
 }
 
 - (instancetype)initWithEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode
@@ -168,6 +188,8 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 
 		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDSSLConfig class] errorNumber:ret];
 	}
+
+	mbedtls_debug_set_threshold(7);
 
 	mbedtls_ssl_conf_verify( self.context, my_verify, (__bridge void*)(self) );
 	mbedtls_ssl_conf_dbg(self.context, my_debug, (__bridge void*)(self));

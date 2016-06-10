@@ -34,11 +34,13 @@ typedef enum {
 
 + (instancetype)configForTCPServer;
 + (instancetype)configForTCPClient;
-+ (instancetype)configForTCPServerWithClientCertificateRequest;
++ (instancetype)configForTCPServerWithPeerCertificateVerification;
++ (instancetype)configForTCPClientWithPeerCertificateVerification;
 
-- (instancetype)initWithTCPServerConfig;
-- (instancetype)initWithTCPClientConfig;
-- (instancetype)initWithTCPServerConfigClientCertificateRequired;
+- (instancetype)initTCPServerConfig;
+- (instancetype)initTCPClientConfig;
+- (instancetype)initTCPServerConfigWithPeerCertificateVerification;
+- (instancetype)initTCPClientConfigWithPeerCertificateVerification;
 - (instancetype)initWithEndpoint:(int)endpoint transport:(int)transport preset:(int)preset authMode:(int)mode;
 
 - (void)setCertificateProfile:(const mbedtls_x509_crt_profile)profile;
