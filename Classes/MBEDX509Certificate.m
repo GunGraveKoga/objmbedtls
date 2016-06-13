@@ -29,6 +29,8 @@
 @property(copy, readwrite)OFArray* extendedKeyUsage;
 @property(copy, readwrite)OFString* serialNumber;
 @property(copy, readwrite)OFDataArray* signature;
+@property(copy, readwrite)OFString* MDAlgorithm;
+@property(copy, readwrite)OFString* PKAlgorithm;
 
 
 - (OFDictionary *)X509_dictionaryFromX509Name:(OFString *)name;
@@ -38,6 +40,10 @@
 - (bool)X509_isAssertedDomain: (OFString*)asserted equalDomain: (OFString*)domain;
 
 @end
+
+
+static MBEDX509Certificate* __TrustedRootCA = nil;
+static MBEDX509Certificate* __TrustedCertificates = nil;
 
 
 @implementation MBEDX509Certificate
@@ -163,6 +169,61 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 @synthesize extendedKeyUsage = _extendedKeyUsage;
 @synthesize serialNumber = _serialNumber;
 @synthesize signature = _signature;
+@synthesize MDAlgorithm = _MDAlgorithm;
+@synthesize PKAlgorithm = _PKAlgorithm;
+
++ (void)initialize
+{
+	if ([self isKindOfClass:[MBEDX509Certificate class]]) {
+		void* pool = objc_autoreleasePoolPush();
+
+		if ([OFApplication environment] == nil) {
+			objc_autoreleasePoolPop(pool);
+
+			return;
+		}
+
+		OFFileManager* fm = [OFFileManager defaultManager];
+
+		#if defined(OF_WINDOWS)
+		if (![fm directoryExistsAtPath:[[OFApplication environment] valueForKey:@"PROGRAMDATA"]]) {
+			objc_autoreleasePoolPop(pool);
+
+			return;
+		}
+		#endif
+
+		OFString* root_ca_path = nil;
+		OFString* trusted_crt_path = nil;
+
+		#if defined(OF_WINDOWS)
+		root_ca_path = [[OFApplication environment] valueForKey:@"PROGRAMDATA"];
+		trusted_crt_path = [[OFApplication environment] valueForKey:@"PROGRAMDATA"];
+		#else
+		root_ca_path = @"~";
+		trusted_crt_path = @"~";
+		#endif
+
+		root_ca_path = [root_ca_path stringByAppendingPathComponent:[OFApplication programName]];
+		if (![fm directoryExistsAtPath:root_ca_path])
+			[fm createDirectoryAtPath:root_ca_path];
+
+		root_ca_path = [[root_ca_path stringByAppendingPathComponent:@"RootCA"] stringByStandardizingPath];
+		if (![fm directoryExistsAtPath:root_ca_path])
+			[fm createDirectoryAtPath:root_ca_path];
+
+		trusted_crt_path = [trusted_crt_path stringByAppendingPathComponent:[OFApplication programName]];
+		if (![fm directoryExistsAtPath:trusted_crt_path])
+			[fm createDirectoryAtPath:trusted_crt_path];
+
+		trusted_crt_path = [[trusted_crt_path stringByAppendingPathComponent:@"TrustedCRT"] stringByStandardizingPath];
+		if (![fm directoryExistsAtPath:trusted_crt_path])
+			[fm createDirectoryAtPath:trusted_crt_path];
+
+		
+		
+	}
+}
 
 + (instancetype)certificate
 {
@@ -209,6 +270,8 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 	[_subject release];
 	[_subjectAlternativeNames release];
 	[_signatureAlgorithm release];
+	[_MDAlgorithm release];
+	[_PKAlgorithm release];
 	[_issued release];
 	[_expires release];
 	[_type release];
@@ -544,6 +607,63 @@ static inline OFString* parse_dn_string(char* buffer, size_t size) {
 		objc_autoreleasePoolPop(pool);
 		[self release];
 		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDX509Certificate class] errorNumber:ret];
+	}
+
+	switch (self.context->sig_md) {
+		case MBEDTLS_MD_MD2:
+			self.MDAlgorithm = @"MD2";
+			break;
+		case MBEDTLS_MD_MD4:
+			self.MDAlgorithm = @"MD4";
+			break;
+		case MBEDTLS_MD_MD5:
+			self.MDAlgorithm = @"MD5";
+			break;
+		case MBEDTLS_MD_SHA1:
+			self.MDAlgorithm = @"SHA1";
+			break;
+		case MBEDTLS_MD_SHA224:
+			self.MDAlgorithm = @"SHA224";
+			break;
+		case MBEDTLS_MD_SHA256:
+			self.MDAlgorithm = @"SHA256";
+			break;
+		case MBEDTLS_MD_SHA384:
+			self.MDAlgorithm = @"SHA384";
+			break;
+		case MBEDTLS_MD_SHA512:
+			self.MDAlgorithm = @"SHA512";
+			break;
+		case MBEDTLS_MD_RIPEMD160:
+			self.MDAlgorithm = @"RIPEMD160";
+			break;
+		default:
+		self.MDAlgorithm = nil;
+			break;
+	}
+
+	switch (self.context->sig_pk) {
+		case MBEDTLS_PK_RSA:
+			self.PKAlgorithm = @"RSA";
+			break;
+		case MBEDTLS_PK_ECKEY:
+			self.PKAlgorithm = @"ECKEY";
+			break;
+		case MBEDTLS_PK_ECKEY_DH:
+			self.PKAlgorithm = @"ECKEY-DH";
+			break;
+		case MBEDTLS_PK_ECDSA:
+			self.PKAlgorithm = @"ECDSA";
+			break;
+		case MBEDTLS_PK_RSA_ALT:
+			self.PKAlgorithm = @"RSA-ALT";
+			break;
+		case MBEDTLS_PK_RSASSA_PSS:
+			self.PKAlgorithm = @"RSASSA-PSS";
+			break;
+		default:
+			self.PKAlgorithm = nil;
+			break;
 	}
 
 	OFString* dtFormat = [OFString stringWithUTF8String:"%Y-%m-%d %H:%M:%S"];

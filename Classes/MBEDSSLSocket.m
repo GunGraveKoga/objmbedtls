@@ -236,8 +236,10 @@
 			if (self.isCertificateVerificationEnabled) {
 				if (_isSSLServer)
 					self.config = [MBEDSSLConfig configForTCPServerWithPeerCertificateVerification];
-				else
+				else {
 					self.config = [MBEDSSLConfig configForTCPClientWithPeerCertificateVerification];
+					
+				}
 
 			} else {
 				if (_isSSLServer)
@@ -289,8 +291,8 @@
 
 		[_SSL setBinaryIO:self];
 
-	} @catch(MBEDTLSException* exce) {
-		exception = [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:((MBEDTLSException *)e).errNo];
+	} @catch(MBEDTLSException* exc) {
+		exception = [SSLConnectionFailedException exceptionWithHost:host port:port socket:self errNo:exc.errNo];
 
 		[exception retain];
 
@@ -304,13 +306,14 @@
 	}@finally {
 		objc_autoreleasePoolPop(pool);
 
-		if (exception != nil)
+		if (exception != nil) {
 			[exception autorelease];
 
-		if (!_isSSLServer)
-			[super close];
+			if (!_isSSLServer)
+				[super close];
 
-		[self reinit_SSL];
+			[self reinit_SSL];
+		}
 	}
 
 	@try {
@@ -335,7 +338,6 @@
 
 	}
 
-
 	[self SSL_peerCertificateVerificationWithHost:host];
 	
 	
@@ -344,6 +346,10 @@
 
 - (void)SSL_peerCertificateVerificationWithHost:(OFString *)host
 {
+	if ((!_isSSLServer && self.isCertificateVerificationEnabled) ||
+		(_isSSLServer && self.isCertificateVerificationEnabled))
+		return;
+
 	if (!_isSSLServer && host == nil) {
 
 		[self close];
@@ -351,62 +357,62 @@
 		@throw [MBEDTLSException exceptionWithObject:self errorNumber:MBEDTLS_ERR_X509_BAD_INPUT_DATA];
 	}
 
-	if (_isSSLServer && !self.isCertificateVerificationEnabled)
-		return;
-
 	int res = 0;
 
 	if ((res = (int)[_SSL peerCertificateVerified]) != 0) {
 		
-	}
-
-
-	if (self.isCertificateVerificationEnabled) {
-		if (_isSSLServer && !self.isRequestClientCertificatesEnabled)
-			return;
-
-		int res = 0;
-		if (flag) {
-			res = (int)[_SSL peerCertificateVerified];
-			if (res != 0) {
-				if (self.delegate != nil) {
-					if ([self.delegate respondsToSelector:@selector(socket:shouldAcceptCertificate:)]) {
-						if ([self.delegate socket:self shouldAcceptCertificate:nil]) {
-							return;
-						}
-					}
-				}
-			
+		if (self.peerCertificate == nil) {
+			if (!_isSSLServer)
+				[self close];
+			else {
+				[_SSL sendFatal:MBEDTLS_SSL_ALERT_MSG_NO_CERT];
+				[_SSL notifyPeerToClose];
+				[self reinit_SSL];
 			}
-		} else {
-			if (host != nil) {
-				if (self.peerCertificate == nil) {
-					[self close];
-					@throw [SSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_MISSING certificate:nil];
-				}
 
-				if (![self.peerCertificate hasCommonNameMatchingDomain:host]) {
-					if (![self.peerCertificate hasDNSNameMatchingDomain:host]) {
-						if (self.delegate != nil) {
-							if ([self.delegate respondsToSelector:@selector(socket:shouldAcceptCertificate:)]) {
-								if ([self.delegate socket:self shouldAcceptCertificate:nil]) {
-									return;
-								}
-							}
-						}
-						[self close];
-						@throw [SSLCertificateVerificationFailedException exceptionWithCode:MBEDTLS_X509_BADCERT_CN_MISMATCH certificate:[self peerCertificate]];
-					}
-				}
-				return;
-			}
-			
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:MBEDTLS_ERR_SSL_NO_CLIENT_CERTIFICATE];
 		}
 
-		[self close];
-		@throw [SSLCertificateVerificationFailedException exceptionWithCode:res certificate:[self peerCertificate]];
-		
+		if ((![self.peerCertificate hasCommonNameMatchingDomain:host]) && (![self.peerCertificate hasDNSNameMatchingDomain:host])) {
+
+			if (self.delegate != nil) {
+
+				if ([self.delegate respondsToSelector:@selector(socket:shouldAcceptCertificate:)]) {
+
+					if ([self.delegate socket:self shouldAcceptCertificate:nil]) {
+
+						return;
+
+					} else {
+						if(!_isSSLServer)
+							[self close];
+						else {
+							[_SSL sendFatal:MBEDTLS_SSL_ALERT_MSG_CERT_UNKNOWN];
+							[_SSL notifyPeerToClose];
+							[self reinit_SSL];
+						}
+						
+						return;
+					}
+				}
+
+			}
+
+			if (!_isSSLServer)
+				[self close];
+			else {
+				[_SSL sendFatal:MBEDTLS_SSL_ALERT_MSG_INTERNAL_ERROR];
+				[_SSL notifyPeerToClose];
+				[self reinit_SSL];
+			}
+
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:MBEDTLS_ERR_X509_CERT_VERIFY_FAILED];
+
+		}
+
 	}
+
+
 }
 
 - (void)close
@@ -500,7 +506,6 @@
 	
 	client->_isSSLServer = true;
 	client.certificateVerificationEnabled = self.certificateVerificationEnabled;
-	client.requestClientCertificatesEnabled = self.requestClientCertificatesEnabled;
 	client.PK = self.PK;
 	client.CA = self.CA;
 	client.CRL = self.CRL;

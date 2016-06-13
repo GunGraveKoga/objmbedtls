@@ -39,5 +39,8 @@
 - (void)notifyPeerToClose;
 - (void)resetSession;
 - (size_t)bytesAvailable;
+- (void)sendWarning:(unsigned char)message;
+- (void)sendFatal:(unsigned char)message;
+- (void)sendMessage:(unsigned char)message level:(unsigned char)level;
 
 @end

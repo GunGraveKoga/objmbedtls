@@ -189,4 +189,26 @@
 
 }
 
+- (bool)isEqual:(id)object 
+{
+	X509Object* x509object;
+
+	if (![object isKindOfClass:[self class]])
+		return false;
+
+	x509object = object;
+
+	void* pool = objc_autoreleasePoolPush();
+
+	if (![self.DER isEqual: x509object.DER]) {
+		objc_autoreleasePoolPop(pool);
+
+		return false;
+	}
+
+	objc_autoreleasePoolPop(pool);
+
+	return true;
+}
+
 @end

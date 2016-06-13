@@ -23,19 +23,19 @@ OF_APPLICATION_DELEGATE(Test)
 {
 	WinBacktrace* plugin = [OFPlugin pluginFromFile:@"WinBacktrace"];
 	
-	of_log(@"Verefy exception:\n\n");
+	of_log(@"Verification exception:\n\n");
 	bool connected = true;
 	MBEDSSLSocket* socket = [MBEDSSLSocket socket];
 	//socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
 	//socket.certificateProfile = kNextDefaultProfile;
-	socket.CA = [MBEDX509Certificate certificateWithFile:@"./GIAG2.crt"];/*
+	socket.CA = [MBEDX509Certificate certificateWithFile:@"./GIAG2.crt"];
 	of_log(@"%@", socket.CA);
 	//socket.sslVersion = OBJMBED_SSLVERSION_TLSv1_2;
-	bool connected = true;
+
 	@try {
 		[socket connectToHost:@"173.194.222.139" port:443]; //exception expected
 	}@catch (id e) {
-		of_log(@"%@", e);
+		of_log(@"Expected exception - %@", e);
 		connected = false;
 	}
 
@@ -52,11 +52,11 @@ OF_APPLICATION_DELEGATE(Test)
 	
 	connected = true;
 	socket.certificateVerificationEnabled = false;
-	of_log(@"Verefy skipped:\n\n");
+	of_log(@"Internal verification:\n\n");
 	@try {
 		[socket connectToHost:@"173.194.222.139" port:443]; //exception not expected
 	}@catch(id e) {
-		of_log(@"Not expected exception - %@", e);
+		of_log(@"Expected exception - %@", e);
 		connected = false;
 	}
 	if (connected) {
@@ -75,10 +75,10 @@ OF_APPLICATION_DELEGATE(Test)
 		[socket close];
 	}
 
-	*/
+	
 	connected = true;
 	socket.certificateVerificationEnabled = true;
-	of_log(@"Verefy passed:\n\n");
+	of_log(@"Verification passed:\n\n");
 	@try {
 		[socket connectToHost:@"google.com" port:443]; //exception not expected
 	}@catch(id e) {
@@ -100,7 +100,34 @@ OF_APPLICATION_DELEGATE(Test)
 		}
 		
 		[socket close];
-	}/*
+	}
+
+	connected = true;
+	socket.certificateVerificationEnabled = false;
+	of_log(@"Internal verification passed:\n\n");
+	@try {
+		[socket connectToHost:@"google.com" port:443]; //exception not expected
+	}@catch(id e) {
+		of_log(@"Not expected exception - %@", e);	
+		[e printDebugBacktrace];
+		connected = false;
+	}
+	if (connected) {
+		of_log(@"Key: %@", socket.peerCertificate.publicKey);
+		of_log(@"DER: %@", socket.peerCertificate.publicKey.DER);
+		of_log(@"PEM: \n%@", socket.peerCertificate.publicKey.PEM);
+		of_log(@"Next %@", [socket.peerCertificate next]);
+
+		[socket writeLine:@"GET / HTTP/1.0\r\n"];
+
+		while (!socket.isAtEndOfStream) {
+			OFString* l = [socket readLine];
+			of_log(@"%@", l);
+		}
+		
+		[socket close];
+	}
+
 	of_log(@"SSL less connection:\n\n");
 	OFTCPSocket* sk = [OFTCPSocket socket];
 
@@ -122,6 +149,8 @@ OF_APPLICATION_DELEGATE(Test)
 
 	[sk close]; //Closing original socket to check socket duplication
 
+	sks.certificateAuthorityFile = @"./GIAG2.crt";
+
 	[sks startTLSWithExpectedHost:@"google.com"];
 
 	[sks writeLine:@"GET / HTTP/1.0\r\n"];
@@ -136,12 +165,16 @@ OF_APPLICATION_DELEGATE(Test)
 	of_log(@"Async connect:\n\n");
 	
 	MBEDSSLSocket* con = [MBEDSSLSocket socket];
+	con.certificateAuthorityFile = @"./GIAG2.crt";
 	con.sslVersion = OBJMBED_SSLVERSION_TLSv1;
+
 	__block bool async_end = false;
+
 	[con asyncConnectToHost:@"google.com" port:443 block:^(OFTCPSocket *socket, OFException *_Nullable exception){
 
 		if (exception != nil) {
 			of_log(@"Async connect exception: %@", exception);
+			//[exception printDebugBacktrace];
 			return;
 		}
 		of_log(@"Async connection");
@@ -157,18 +190,17 @@ OF_APPLICATION_DELEGATE(Test)
 		[sock close];
 
 		async_end = true;
+		of_log(@"End async");
 
 	}];
 
 	[OFTimer scheduledTimerWithTimeInterval:0.5 repeats:true block:^(OFTimer *timer){
+		of_log(@"check");
 		if (async_end)
 			[OFApplication terminate];
 
 		return;
 	}];
-
-	*/
-	[OFApplication terminate];
 }
 
 @end

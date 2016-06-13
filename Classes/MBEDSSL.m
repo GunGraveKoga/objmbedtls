@@ -158,5 +158,27 @@
 		@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
 }
 
+- (void)sendWarning:(unsigned char)message
+{
+	[self sendMessage:message level:MBEDTLS_SSL_ALERT_LEVEL_WARNING];
+}
+
+- (void)sendFatal:(unsigned char)message
+{
+	[self sendMessage:message level:MBEDTLS_SSL_ALERT_LEVEL_FATAL];
+}
+
+- (void)sendMessage:(unsigned char)message level:(unsigned char)level
+{
+	int ret = 0;
+
+	while ((ret = mbedtls_ssl_send_alert_message(self.context, level, message)) != 0) {
+		if ((ret != MBEDTLS_ERR_SSL_WANT_READ) && (ret != MBEDTLS_ERR_SSL_WANT_WRITE))
+			@throw [MBEDTLSException exceptionWithObject:self errorNumber:ret];
+
+	}
+}
+
+
 
 @end

@@ -33,6 +33,8 @@ OBJMBEDTLS_EXPORT OFString *const kMozillaCARootCertificates;
 	OFDictionary *_subjectAlternativeNames;
 	uint8_t _version;
 	OFString *_signatureAlgorithm;
+	OFString* _MDAlgorithm;
+	OFString* _PKAlgorithm;
 	OFDate *_issued;
 	OFDate *_expires;
 	int _keySize;
@@ -78,6 +80,16 @@ OBJMBEDTLS_EXPORT OFString *const kMozillaCARootCertificates;
  * Signature algorithm description.
  */
 @property(copy, readonly)OFString* signatureAlgorithm;
+
+/*!
+* Internal representation of the MD algorithm of the signature algorithm
+*/
+@property(copy, readonly)OFString* MDAlgorithm;
+
+/*!
+* Internal representation of the Public Key algorithm of the signature algorithm
+*/
+@property(copy, readonly)OFString* PKAlgorithm;
 
 /*!
  * Certificate issued date.

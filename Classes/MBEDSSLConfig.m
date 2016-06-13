@@ -9,6 +9,7 @@
 
 #include <mbedtls/debug.h>
 
+#if defined(SSL_DEBUG)
 static OFFile* __log = nil;
 
 static int my_verify( void *data, mbedtls_x509_crt *crt, int depth, uint32_t *flags )
@@ -43,7 +44,7 @@ static void my_debug( void *ctx, int level,
     [__log writeFormat:@"%s:%04d: |%d| %s\n", file, line, level, str];
     //of_log(@"%s:%04d: |%d| %s", file, line, level, str);
 }
-
+#endif
 
 const mbedtls_x509_crt_profile kDefaultProfile = {
 	/* Hashes from SHA-1 and above */
@@ -188,12 +189,12 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 
 		@throw [MBEDInitializationFailedException exceptionWithClass:[MBEDSSLConfig class] errorNumber:ret];
 	}
-
+#if defined(SSL_DEBUG)
 	mbedtls_debug_set_threshold(7);
 
 	mbedtls_ssl_conf_verify( self.context, my_verify, (__bridge void*)(self) );
 	mbedtls_ssl_conf_dbg(self.context, my_debug, (__bridge void*)(self));
-
+#endif
 	mbedtls_ssl_conf_authmode(self.context, mode);
 
 	MBEDEntropy* entropy = [MBEDEntropy defaultEntropy];
