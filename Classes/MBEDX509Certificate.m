@@ -42,10 +42,6 @@
 @end
 
 
-static MBEDX509Certificate* __TrustedRootCA = nil;
-static MBEDX509Certificate* __TrustedCertificates = nil;
-
-
 @implementation MBEDX509Certificate
 
 @dynamic next;
@@ -172,58 +168,6 @@ static OFString* objmbedtls_x509_info_ext_key_usage(const mbedtls_x509_sequence 
 @synthesize MDAlgorithm = _MDAlgorithm;
 @synthesize PKAlgorithm = _PKAlgorithm;
 
-+ (void)initialize
-{
-	if ([self isKindOfClass:[MBEDX509Certificate class]]) {
-		void* pool = objc_autoreleasePoolPush();
-
-		if ([OFApplication environment] == nil) {
-			objc_autoreleasePoolPop(pool);
-
-			return;
-		}
-
-		OFFileManager* fm = [OFFileManager defaultManager];
-
-		#if defined(OF_WINDOWS)
-		if (![fm directoryExistsAtPath:[[OFApplication environment] valueForKey:@"PROGRAMDATA"]]) {
-			objc_autoreleasePoolPop(pool);
-
-			return;
-		}
-		#endif
-
-		OFString* root_ca_path = nil;
-		OFString* trusted_crt_path = nil;
-
-		#if defined(OF_WINDOWS)
-		root_ca_path = [[OFApplication environment] valueForKey:@"PROGRAMDATA"];
-		trusted_crt_path = [[OFApplication environment] valueForKey:@"PROGRAMDATA"];
-		#else
-		root_ca_path = @"~";
-		trusted_crt_path = @"~";
-		#endif
-
-		root_ca_path = [root_ca_path stringByAppendingPathComponent:[OFApplication programName]];
-		if (![fm directoryExistsAtPath:root_ca_path])
-			[fm createDirectoryAtPath:root_ca_path];
-
-		root_ca_path = [[root_ca_path stringByAppendingPathComponent:@"RootCA"] stringByStandardizingPath];
-		if (![fm directoryExistsAtPath:root_ca_path])
-			[fm createDirectoryAtPath:root_ca_path];
-
-		trusted_crt_path = [trusted_crt_path stringByAppendingPathComponent:[OFApplication programName]];
-		if (![fm directoryExistsAtPath:trusted_crt_path])
-			[fm createDirectoryAtPath:trusted_crt_path];
-
-		trusted_crt_path = [[trusted_crt_path stringByAppendingPathComponent:@"TrustedCRT"] stringByStandardizingPath];
-		if (![fm directoryExistsAtPath:trusted_crt_path])
-			[fm createDirectoryAtPath:trusted_crt_path];
-
-		
-		
-	}
-}
 
 + (instancetype)certificate
 {

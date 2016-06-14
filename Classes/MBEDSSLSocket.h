@@ -7,6 +7,7 @@
 #include <mbedtls/net.h>
 
 @class OFString;
+@class OFMutableDictionary;
 @class MBEDX509Certificate;
 @class MBEDCRL;
 @class MBEDPKey;
@@ -32,10 +33,16 @@
     bool _certificateVerificationEnabled;
     objmbed_ssl_version_t _sslVersion;
     mbedtls_x509_crt_profile _certificateProfile;
-
-    bool _isSSLServer;
+    
 
     MBEDX509Certificate* _peerCertificate;
+
+@protected
+    bool _isSSLServer;
+
+    OFMutableDictionary* _SNIHostPKeys;
+    OFMutableDictionary* _SNIHostPKPasswords;
+    OFMutableDictionary* _SNIHostCertificates;
 }
 
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* CA;

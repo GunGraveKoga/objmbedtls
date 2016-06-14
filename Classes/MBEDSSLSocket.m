@@ -80,6 +80,10 @@
 
 	_isSSLServer = false;
 
+	_SNIHostCertificates = nil;
+	_SNIHostPKeys = nil;
+	_SNIHostPKPasswords = nil;
+
 	return self;
 
 }
@@ -176,6 +180,9 @@
 	[_peerCertificate release];
 	[_SSL release];
 	[_config release];
+	[_SNIHostCertificates release];
+	[_SNIHostPKeys release];
+	[_SNIHostPKPasswords release];
 
 	[super dealloc];
 }
@@ -646,32 +653,67 @@
 //Not implemented
 - (nullable OFString*)privateKeyFileForSNIHost:(OFString *)SNIHost
 {
-	OF_UNRECOGNIZED_SELECTOR
+	if (_SNIHostPKeys == nil)
+		return nil;
+
+	return [_SNIHostPKeys valueForKey:SNIHost];
 }
 
 - (nullable const char*)privateKeyPassphraseForSNIHost:(OFString*)SNIHost
 {
-	OF_UNRECOGNIZED_SELECTOR
+	if (_SNIHostPKPasswords == nil)
+		return NULL;
+
+	if ([_SNIHostPKPasswords valueForKey:SNIHost] != nil)
+		return [[_SNIHostPKPasswords valueForKey:SNIHost] UTF8String];
+
+	return NULL;
 }
 
 - (void)setPrivateKeyPassphrase:(const char*)privateKeyPassphrase forSNIHost:(OFString*)SNIHost
 {
-	OF_UNRECOGNIZED_SELECTOR
+	if (_SNIHostPKPasswords == nil)
+		_SNIHostPKPasswords = [[OFMutableDictionary alloc] init];
+
+	OFAutoreleasePool* pool = [OFAutoreleasePool new];
+	id exception = nil;
+	@try {
+		[_SNIHostPKPasswords setValue:[OFString stringWithUTF8String:privateKeyPassphrase] forKey:SNIHost];
+
+	}@catch (id e) {
+		exception = [e retain];
+		@throw;
+
+	}@finally {
+		[pool release];
+
+		if (exception != nil)
+			[exception autorelease];
+	}
 }
 
 - (void)setPrivateKeyFile:(OFString*)privateKeyFile forSNIHost:(OFString*)SNIHost
 {
-	OF_UNRECOGNIZED_SELECTOR
+	if (_SNIHostPKeys == nil)
+		_SNIHostPKeys = [[OFMutableDictionary alloc] init];
+
+	[_SNIHostPKeys setValue:privateKeyFile forKey:SNIHost];
 }
 
 - (nullable OFString*)certificateFileForSNIHost: (OFString*)SNIHost
 {
-	OF_UNRECOGNIZED_SELECTOR
+	if (_SNIHostCertificates == nil)
+		return nil;
+
+	return [_SNIHostCertificates valueForKey:SNIHost];
 }
 
 - (void)setCertificateFile:(OFString*)certificateFile forSNIHost:(OFString*)SNIHost
 {
-	OF_UNRECOGNIZED_SELECTOR
+	if (_SNIHostCertificates == nil)
+		_SNIHostCertificates = [[OFMutableDictionary alloc] init];
+
+	[_SNIHostCertificates setValue:certificateFile forKey:SNIHost];
 }
 
 @end
