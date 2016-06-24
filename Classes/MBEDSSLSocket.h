@@ -15,10 +15,6 @@
 
 @interface MBEDSSLSocket: OFTCPSocket<OFTLSSocket>
 {
-    MBEDX509Certificate* _CA;
-    MBEDCRL* _CRL;
-    MBEDPKey* _PK;
-    MBEDX509Certificate* _ownCertificate;
     MBEDSSL* _SSL;
     MBEDSSLConfig* _config;
 
@@ -33,7 +29,7 @@
     bool _certificateVerificationEnabled;
     objmbed_ssl_version_t _sslVersion;
     mbedtls_x509_crt_profile _certificateProfile;
-    
+
 
     MBEDX509Certificate* _peerCertificate;
 
@@ -45,10 +41,6 @@
     OFMutableDictionary* _SNIHostCertificates;
 }
 
-@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* CA;
-@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDCRL* CRL;
-@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDPKey* PK;
-@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* ownCertificate;
 @property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDSSLConfig* config;
 @property OF_NULLABLE_PROPERTY (retain, readonly)MBEDSSL* SSL;
 

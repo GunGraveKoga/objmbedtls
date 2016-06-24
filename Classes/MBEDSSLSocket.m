@@ -39,11 +39,6 @@
 @dynamic certificateVerificationEnabled;
 @dynamic SSL;
 
-@synthesize CA = _CA;
-@synthesize CRL = _CRL;
-@synthesize PK = _PK;
-@synthesize certificateProfile = _certificateProfile;
-@synthesize ownCertificate = _ownCertificate;
 @dynamic sslVersion;
 
 @dynamic context;
@@ -64,10 +59,6 @@
 	self.privateKeyPassphrase = NULL;
 	self.certificateAuthorityFile = nil;
 	self.certificateRevocationListFile = nil;
-	self.CA = nil;
-	self.CRL = nil;
-	self.PK = nil;
-	self.ownCertificate = nil;
 	self.config = nil;
 
 	_SSL = nil;
@@ -91,7 +82,6 @@
 - (void)reinit_SSL
 {
 	[_SSL release];
-	[_config release];
 
 	if (_peerCertificate != nil) {
 		[_peerCertificate release];
@@ -99,7 +89,6 @@
 	}
 
 	_SSL = nil;
-	_config = nil;
 	
 }
 
@@ -173,10 +162,6 @@
 	[_certificateFile release];
 	[_privateKeyFile release];
 	mbedtls_net_free(self.context);
-	[_CA release];
-	[_CRL release];
-	[_PK release];
-	[_ownCertificate release];
 	[_peerCertificate release];
 	[_SSL release];
 	[_config release];
@@ -255,35 +240,27 @@
 					self.config = [MBEDSSLConfig configForTCPClient];
 
 			}
-		}
 
+			if (self.certificateAuthorityFile != nil)
+				self.config.CA = [MBEDX509Certificate certificateWithFile:self.certificateAuthorityFile];
+			else
+				self.config.CA = [MBEDX509Certificate certificate]; //must be system CA
 
-		if (self.CA == nil) {
-			if (self.certificateAuthorityFile != nil) {
-				self.CA = [MBEDX509Certificate certificateWithFile:self.certificateAuthorityFile];
+			if (self.certificateRevocationListFile != nil)
+				self.config.CRL = [MBEDCRL crlWithFile:self.certificateRevocationListFile]; //must be system CRL
 
-			} else {
-				self.CA = [MBEDX509Certificate certificate];
-			}
-		}
+			if (self.certificateFile != nil)
+				self.config.ownCertificate = [MBEDX509Certificate certificateWithFile:self.certificateFile];
 
-		if (self.CRL == nil) {
-			if (self.certificateRevocationListFile != nil) {
-				self.CRL = [MBEDCRL crlWithFile:self.certificateRevocationListFile];
+			if (self.privateKeyFile != nil)
+				self.config.PK = [MBEDPKey keyWithPrivateKeyFile:self.privateKeyFile password:[OFString stringWithUTF8String:self.privateKeyPassphrase]];
 
-			}
 		}
 
 		if (self.CRL == nil)
 			self.config.certificateAuthorityChain = self.CA;
 		else
 			[self.config setCertificateAuthorityChain:self.CA withCRL:self.CRL];
-
-		if (self.ownCertificate == nil && self.certificateFile != nil)
-			self.ownCertificate = [MBEDX509Certificate certificateWithFile:self.certificateFile];
-
-		if (self.PK == nil && self.privateKeyFile != nil)
-			self.PK = [MBEDPKey keyWithPrivateKeyFile:self.privateKeyFile password:[OFString stringWithUTF8String:self.privateKeyPassphrase]];
 
 		if (self.PK != nil && self.ownCertificate != nil)
 			[self.config setOwnCertificate:self.ownCertificate withPrivateKey:self.PK];

@@ -28,9 +28,19 @@ typedef enum {
 @interface MBEDSSLConfig: OFObject
 {
 	mbedtls_ssl_config _context;
+
+	MBEDX509Certificate* _CA;
+    MBEDCRL* _CRL;
+    MBEDPKey* _PK;
+    MBEDX509Certificate* _ownCertificate;
 }
 
 @property (assign, readonly)mbedtls_ssl_config *context;
+
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* CA;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDCRL* CRL;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDPKey* PK;
+@property OF_NULLABLE_PROPERTY (retain, readwrite)MBEDX509Certificate* ownCertificate;
 
 + (instancetype)configForTCPServer;
 + (instancetype)configForTCPClient;

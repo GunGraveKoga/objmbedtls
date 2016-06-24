@@ -106,6 +106,12 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 
 @implementation MBEDSSLConfig
 
+@synthesize CA = _CA;
+@synthesize CRL = _CRL;
+@synthesize PK = _PK;
+@synthesize certificateProfile = _certificateProfile;
+@synthesize ownCertificate = _ownCertificate;
+
 @dynamic context;
 
 + (instancetype)configForTCPServer
@@ -135,12 +141,22 @@ const mbedtls_x509_crt_profile kNSASuiteBProfile =
 
 	mbedtls_ssl_config_init(self.context);
 
+    self.CA = nil;
+    self.CRL = nil;
+    self.PK = nil;
+    self.ownCertificate = nil;
+
 	return self;
 }
 
 - (void)dealloc
 {
 	mbedtls_ssl_config_free(self.context);
+
+    [_CA release];
+    [_CRL release];
+    [_PK release];
+    [_ownCertificate release];
 
 	[super dealloc];
 }
